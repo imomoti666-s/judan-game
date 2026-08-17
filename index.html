@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#10131f" />
+    <meta name="description" content="太めで温厚な猪獣人を育てる、縦画面固定の弾幕ハクスラ。" />
+    <title>獣弾 -JUDAN-</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/ui/icon-192.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="app" aria-label="獣弾 ゲーム画面">
+      <div id="viewport">
+        <canvas id="game" width="450" height="800" aria-label="弾幕ゲーム領域"></canvas>
+
+        <div id="hud" class="hud is-hidden" aria-live="polite">
+          <div class="hud-row">
+            <div class="hud-stage">
+              <span id="hud-stage">第一層</span>
+              <strong id="hud-score">0</strong>
+            </div>
+            <button id="pause-button" class="icon-button" type="button" aria-label="一時停止">Ⅱ</button>
+          </div>
+          <div class="meters">
+            <div class="meter meter-hp"><i id="hp-fill"></i><span id="hp-text">耐久</span></div>
+            <div class="meter meter-spirit"><i id="spirit-fill"></i><span>炉心</span></div>
+          </div>
+          <div id="boss-wrap" class="boss-meter is-hidden">
+            <span id="boss-name">異形核</span><i id="boss-fill"></i>
+          </div>
+        </div>
+
+        <div id="touch-controls" class="touch-controls is-hidden">
+          <button id="focus-button" class="control-button focus-button" type="button">
+            <span>低速</span><small>FOCUS</small>
+          </button>
+          <button id="bomb-button" class="control-button bomb-button" type="button">
+            <span id="bomb-count">霊圧 ×2</span><small>BOMB</small>
+          </button>
+        </div>
+
+        <section id="menu-layer" class="layer menu-layer">
+          <header class="brand">
+            <p>PORTRAIT BULLET HUNT</p>
+            <h1>獣弾 <span>-JUDAN-</span></h1>
+            <div class="profile-line">
+              <span id="level-label">鍛錬 1</span>
+              <span id="coin-label">欠片 0</span>
+            </div>
+          </header>
+
+          <nav class="tabs" aria-label="格納庫メニュー">
+            <button class="tab is-active" type="button" data-tab="sortie">出撃</button>
+            <button class="tab" type="button" data-tab="training">鍛錬</button>
+            <button class="tab" type="button" data-tab="gear">装備</button>
+            <button class="tab" type="button" data-tab="settings">設定</button>
+          </nav>
+
+          <div class="panel-wrap">
+            <section id="panel-sortie" class="panel is-active" data-panel="sortie">
+              <div class="hero-card">
+                <div class="hero-sprite" aria-hidden="true"></div>
+                <div>
+                  <p class="eyebrow">第一の弾幕使い</p>
+                  <h2>猪獣人の修練者</h2>
+                  <p>穏やかな巨体で、牙の霊弾を放つ。指を滑らせて移動、射撃は自動だ。</p>
+                </div>
+              </div>
+              <div id="stat-strip" class="stat-strip"></div>
+              <div id="stage-list" class="stage-list"></div>
+              <p class="tip">画面内をドラッグして移動。低速中は当たり判定が見え、かすりで炉心が満ちる。</p>
+            </section>
+
+            <section id="panel-training" class="panel" data-panel="training">
+              <div class="section-heading">
+                <div><p class="eyebrow">恒久成長</p><h2>肉体と霊脈を鍛える</h2></div>
+                <span id="training-coins">欠片 0</span>
+              </div>
+              <div id="upgrade-list" class="upgrade-list"></div>
+            </section>
+
+            <section id="panel-gear" class="panel" data-panel="gear">
+              <div class="section-heading">
+                <div><p class="eyebrow">戦利品</p><h2>弾道を組み替える</h2></div>
+                <span id="inventory-count">0 / 24</span>
+              </div>
+              <div id="equipped-list" class="equipped-list"></div>
+              <div id="inventory-list" class="inventory-list"></div>
+            </section>
+
+            <section id="panel-settings" class="panel" data-panel="settings">
+              <div class="section-heading"><div><p class="eyebrow">端末設定</p><h2>操作と演出</h2></div></div>
+              <label class="setting-row"><span>音量</span><input id="volume-setting" type="range" min="0" max="1" step="0.05" /></label>
+              <label class="setting-row"><span>移動感度</span><input id="sensitivity-setting" type="range" min="0.65" max="1.5" step="0.05" /></label>
+              <label class="setting-row"><span>画面振動</span><input id="shake-setting" type="checkbox" /></label>
+              <div class="save-actions">
+                <button id="export-save" class="secondary-button" type="button">セーブを書き出す</button>
+                <button id="import-save" class="secondary-button" type="button">セーブを読み込む</button>
+              </div>
+              <p class="tip">セーブは端末内に保存される。ブラウザデータ消去に備え、書き出しを推奨する。</p>
+            </section>
+          </div>
+        </section>
+
+        <section id="modal-layer" class="layer modal-layer is-hidden" aria-modal="true" role="dialog">
+          <div id="modal-card" class="modal-card"></div>
+        </section>
+
+        <div id="toast" class="toast" aria-live="polite"></div>
+        <div id="orientation-warning"><strong>縦向きに戻すのだ</strong><span>『獣弾』は縦画面固定だ。</span></div>
+      </div>
+    </main>
+    <script type="module" src="src/game.js"></script>
+  </body>
+</html>
