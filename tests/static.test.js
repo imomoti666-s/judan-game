@@ -87,7 +87,7 @@ test("自機を拡大し、高速・低速の両方で半透明の赤い当た�
   assert.match(game, /bullet\.radius \+ PLAYER_HIT_RADIUS/);
 });
 
-test("通常装備と独立した随伴器UIと4系統のショットが存在する", () => {
+test("通常装備と独立した随伴器UIが主砲を残して4系統の副砲を加える", () => {
   const html = read("index.html");
   const data = read("src/data.js");
   const game = read("src/game.js");
@@ -98,6 +98,11 @@ test("通常装備と独立した随伴器UIと4系統のショットが存在�
     assert.match(data, new RegExp(`${type}:\\s*\\{`));
     assert.match(game, new RegExp(`type === [\"']${type}[\"']`));
   }
+  assert.match(html, /基本の双牙弾は常時発射/);
+  assert.match(game, /fireMainShots\(focused\)/);
+  assert.match(game, /fireOptionShots\(focused\)/);
+  assert.match(game, /const interval = this\.stats\.fireInterval \/ overdriveRate/);
+  assert.doesNotMatch(game, /this\.stats\.fireInterval \* optionInterval/);
   assert.match(game, /generateOptionDrop/);
   assert.match(game, /addOption/);
 });
