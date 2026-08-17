@@ -26,7 +26,7 @@ import {
   unequipOption,
   upgradeCost,
   xpToNext,
-} from "./data.js?v=0.2.0";
+} from "./data.js?v=0.2.1";
 
 const WIDTH = 450;
 const HEIGHT = 800;
@@ -36,6 +36,12 @@ const PLAYER_FOCUS_DRAW_SIZE = 176;
 const PLAYER_HIT_RADIUS = 5;
 const PLAYER_HIT_Y_OFFSET = 10;
 const TAU = Math.PI * 2;
+const OPTION_FIRE_INTERVAL = {
+  fan: 0.62,
+  lance: 1.1,
+  homing: 0.76,
+  twin: 0.34,
+};
 
 const STAGES = [
   {
@@ -115,7 +121,7 @@ class JudanGame {
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("sw.js?v=0.2.0").then((registration) => registration.update()).catch(() => {});
+        navigator.serviceWorker.register("sw.js?v=0.2.1").then((registration) => registration.update()).catch(() => {});
       });
     }
   }
@@ -239,7 +245,7 @@ class JudanGame {
       const dismantle = event.target.closest("[data-dismantle-option]");
       if (equip && equipOption(this.save, equip.dataset.equipOption)) {
         persistSave(this.save);
-        this.showToast("随伴器を接続した――弾道が変わるぞ");
+        this.showToast("随伴器を接続した――副砲が加わるぞ");
         this.renderMenu();
         return;
       }
@@ -385,7 +391,7 @@ class JudanGame {
 
     this.dom.equippedOption.innerHTML = equippedOption
       ? this.optionCardHtml(equippedOption, true)
-      : `<article class="option-card is-empty"><div class="option-icon">基</div><div><h4>随伴器なし</h4><p>基本の双牙弾を使用する。ステージ踏破で随伴器が候補へ現れる。</p></div></article>`;
+      : `<article class="option-card is-empty"><div class="option-icon">基</div><div><h4>随伴器なし</h4><p>基本の双牙弾だけを使用する。ステージ踏破で随伴器が候補へ現れる。</p></div></article>`;
     const sortedOptions = [...this.save.optionInventory]
       .filter((item) => item.id !== equippedOption?.id)
       .sort((a, b) => RARITIES[b.rarity].value - RARITIES[a.rarity].value);
@@ -467,6 +473,7 @@ class JudanGame {
       focus: false,
       invincible: 1.2,
       fireTimer: 0,
+      optionFireTimer: 0,
       spirit: 0,
       overdrive: 0,
       motionX: 0,
@@ -567,100 +574,108 @@ class JudanGame {
 
     this.player.fireTimer -= dt;
     const overdriveRate = this.player.overdrive > 0 ? 1.72 : 1;
-    const optionInterval = {
-      fan: 1.12,
-      lance: 1.78,
-      homing: 1.08,
-      twin: 0.94,
-    }[this.option?.optionType] || 1;
-    const interval = this.stats.fireInterval * optionInterval / overdriveRate;
+    const interval = this.stats.fireInterval / overdriveRate;
     while (this.player.fireTimer <= 0) {
-      this.firePlayerShots(focused);
+      this.fireMainShots(focused);
       this.player.fireTimer += interval;
+    }
+
+    if (!this.option) return;
+    this.player.optionFireTimer -= dt;
+    const optionInterval = this.getOptionFireInterval() / overdriveRate;
+    while (this.player.optionFireTimer <= 0) {
+      this.fireOptionShots(focused);
+      this.player.optionFireTimer += optionInterval;
     }
   }
 
-  firePlayerShots(focused) {
+  getOptionFireInterval(optionType = this.option?.optionType) {
+    return OPTION_FIRE_INTERVAL[optionType] || 0.8;
+  }
+
+  fireMainShots(focused) {
     const baseCount = this.stats.projectiles + (this.player.overdrive > 0 ? 1 : 0);
     const baseDamage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
-    const optionPower = Number(this.option?.power || 1);
-    const type = this.option?.optionType;
+    const spread = focused ? this.stats.spread * 0.36 : this.stats.spread;
+    for (let i = 0; i < baseCount; i += 1) {
+      this.addPlayerShot({
+        x: this.player.x + (i - (baseCount - 1) / 2) * 7,
+        y: this.player.y - 44,
+        angle: (i - (baseCount - 1) / 2) * spread,
+        speed: 670,
+        damage: baseDamage,
+        radius: 8,
+        hitsLeft: this.stats.pierce,
+        type: "base",
+      });
+    }
+    this.shotSoundTick += 1;
+    if (this.shotSoundTick % 5 === 0) this.tone(420, 0.025, "triangle", 0.018);
+  }
+
+  fireOptionShots(focused) {
+    if (!this.option) return;
+    const baseDamage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
+    const optionPower = Number(this.option.power || 1);
+    const type = this.option.optionType;
 
     if (type === "fan") {
-      const count = 5 + Math.max(0, baseCount - 2);
-      const spread = focused ? 0.065 : 0.15;
+      const count = 5;
+      const spread = focused ? 0.045 : 0.13;
       for (let i = 0; i < count; i += 1) {
         this.addPlayerShot({
-          x: this.player.x,
-          y: this.player.y - 42,
+          x: this.player.x + (i - 2) * 4,
+          y: this.player.y - 32,
           angle: (i - (count - 1) / 2) * spread,
-          speed: focused ? 710 : 625,
-          damage: baseDamage * optionPower * 0.48,
-          radius: 7,
-          hitsLeft: this.stats.pierce,
+          speed: focused ? 690 : 610,
+          damage: baseDamage * optionPower * 0.26,
+          radius: 6,
+          hitsLeft: Math.max(0, this.stats.pierce - 1),
           type: "fan",
         });
       }
     } else if (type === "lance") {
-      const projectileBonus = 1 + Math.max(0, baseCount - 2) * 0.18;
       this.addPlayerShot({
         x: this.player.x,
-        y: this.player.y - 54,
+        y: this.player.y - 58,
         angle: 0,
-        speed: 760,
-        damage: baseDamage * optionPower * 2.8 * projectileBonus,
+        speed: 730,
+        damage: baseDamage * optionPower * 3.25,
         radius: 15,
-        hitsLeft: this.stats.pierce + 5,
+        hitsLeft: this.stats.pierce + 7,
         type: "lance",
       });
     } else if (type === "homing") {
-      const count = Math.max(3, baseCount);
-      const spread = focused ? 0.07 : 0.17;
+      const count = 2;
+      const spread = focused ? 0.055 : 0.12;
       for (let i = 0; i < count; i += 1) {
         this.addPlayerShot({
-          x: this.player.x + (i - (count - 1) / 2) * 12,
-          y: this.player.y - 40,
+          x: this.player.x + (i ? 32 : -32),
+          y: this.player.y - 24,
           angle: (i - (count - 1) / 2) * spread,
-          speed: 540,
-          damage: baseDamage * optionPower * 0.66,
-          radius: 8,
-          hitsLeft: this.stats.pierce,
+          speed: 515,
+          damage: baseDamage * optionPower * 0.42,
+          radius: 7,
+          hitsLeft: Math.max(0, this.stats.pierce - 1),
           type: "homing",
-          turnRate: focused ? 6.2 : 4.6,
+          turnRate: focused ? 6.4 : 5,
         });
       }
     } else if (type === "twin") {
       const lane = focused ? 34 : 50;
-      const lanes = [-lane, 0, lane];
-      for (const offset of lanes) {
+      for (const offset of [-lane, lane]) {
         this.addPlayerShot({
           x: this.player.x + offset,
-          y: this.player.y - (offset ? 20 : 45),
-          angle: focused ? -offset * 0.0008 : 0,
-          speed: 690,
-          damage: baseDamage * optionPower * 0.7 * (1 + Math.max(0, baseCount - 2) * 0.12),
-          radius: 8,
-          hitsLeft: this.stats.pierce,
+          y: this.player.y - 20,
+          angle: focused ? -offset * 0.0006 : 0,
+          speed: 650,
+          damage: baseDamage * optionPower * 0.34,
+          radius: 7,
+          hitsLeft: Math.max(0, this.stats.pierce - 1),
           type: "twin",
         });
       }
-    } else {
-      const spread = focused ? this.stats.spread * 0.36 : this.stats.spread;
-      for (let i = 0; i < baseCount; i += 1) {
-        this.addPlayerShot({
-          x: this.player.x + (i - (baseCount - 1) / 2) * 7,
-          y: this.player.y - 44,
-          angle: (i - (baseCount - 1) / 2) * spread,
-          speed: 670,
-          damage: baseDamage,
-          radius: 8,
-          hitsLeft: this.stats.pierce,
-          type: "base",
-        });
-      }
     }
-    this.shotSoundTick += 1;
-    if (this.shotSoundTick % 5 === 0) this.tone(420, 0.025, "triangle", 0.018);
   }
 
   addPlayerShot({ x, y, angle, speed, damage, radius, hitsLeft, type, turnRate = 0 }) {
@@ -1467,7 +1482,7 @@ class JudanGame {
     const message = retreated
       ? "持ち帰れるものだけを確保した。欲を抑えるのも腕のうちだ。"
       : success
-        ? "異形核を砕いた。通常装備か、弾道を変える随伴器を一つ選べ。"
+        ? "異形核を砕いた。通常装備か、副砲を加える随伴器を一つ選べ。"
         : "鍛錬と欠片は残る。回収できた品を一つ持ち帰れる。";
     const lootHtml = choices.length
       ? `<div class="loot-choices">${choices.map((item, index) => `<button class="loot-choice" data-loot-index="${index}">${item.kind === "option" ? this.optionCardHtml(item, false, true) : this.gearCardHtml(item, false, true)}</button>`).join("")}</div>`
