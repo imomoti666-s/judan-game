@@ -88,7 +88,7 @@ test("運気と深度は上位レアリティの抽選余地を持つ", () => {
   assert.equal(high, "cursed");
 });
 
-test("随伴器は4種の弾道を持ち、通常装備とは別枠で装着・分解できる", () => {
+test("随伴器は4種の副砲を持ち、通常装備とは別枠で装着・分解できる", () => {
   const save = createDefaultSave();
   assert.equal(save.equippedOption, null);
   for (const optionType of Object.keys(OPTION_TYPES)) {
