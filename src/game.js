@@ -22,6 +22,10 @@ import {
 const WIDTH = 450;
 const HEIGHT = 800;
 const PLAY_BOTTOM = 724;
+const PLAYER_DRAW_SIZE = 184;
+const PLAYER_FOCUS_DRAW_SIZE = 176;
+const PLAYER_HIT_RADIUS = 5;
+const PLAYER_HIT_Y_OFFSET = 10;
 const TAU = Math.PI * 2;
 
 const STAGES = [
@@ -692,7 +696,7 @@ class JudanGame {
   }
 
   shootAimed(enemy, count, spread, speed, color) {
-    const hitY = this.player.y + 10;
+    const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
     const base = Math.atan2(hitY - enemy.y, this.player.x - enemy.x);
     for (let i = 0; i < count; i += 1) {
       const angle = base + (i - (count - 1) / 2) * spread;
@@ -784,11 +788,11 @@ class JudanGame {
     }
 
     const hitX = this.player.x;
-    const hitY = this.player.y + 10;
+    const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
     const grazeRadius = this.stats.grazeRadius + (this.player.focus ? 5 : 0);
     for (const bullet of this.enemyBullets) {
       const distSq = distanceSq(hitX, hitY, bullet.x, bullet.y);
-      const hitRadius = bullet.radius + 5;
+      const hitRadius = bullet.radius + PLAYER_HIT_RADIUS;
       if (distSq <= hitRadius * hitRadius && this.player.invincible <= 0) {
         bullet.remove = true;
         this.damagePlayer();
@@ -836,7 +840,7 @@ class JudanGame {
     this.player.invincible = 1.15;
     this.player.spirit *= 0.35;
     this.shake = 8;
-    this.spawnParticles(this.player.x, this.player.y + 10, "#ff6b70", 16, 145);
+    this.spawnParticles(this.player.x, this.player.y + PLAYER_HIT_Y_OFFSET, "#ff6b70", 16, 145);
     this.tone(86, 0.18, "square", 0.12);
     if (navigator.vibrate) navigator.vibrate(35);
     if (this.player.hp <= 0) this.finishRun(false);
@@ -952,28 +956,55 @@ class JudanGame {
     }
     const frame = Math.floor(this.time * (focused ? 7 : 9)) % 6;
     const image = this.images[state];
-    const size = focused ? 137 : 144;
-    const alpha = this.player.invincible > 0 && Math.floor(this.time * 18) % 2 ? 0.42 : 1;
+    const size = focused ? PLAYER_FOCUS_DRAW_SIZE : PLAYER_DRAW_SIZE;
+    const invincibilityFlicker = this.player.invincible > 0 && Math.floor(this.time * 18) % 2;
+    const alpha = (focused ? 0.48 : 1) * (invincibilityFlicker ? 0.42 : 1);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = this.player.overdrive > 0 ? "#ffd66d" : "#45d7c2";
     ctx.shadowBlur = this.player.overdrive > 0 ? 24 : 10;
-    ctx.drawImage(image, frame * 256, 0, 256, 256, this.player.x - size / 2, this.player.y - 86, size, size);
+    ctx.drawImage(image, frame * 256, 0, 256, 256, this.player.x - size / 2, this.player.y - size * 0.6, size, size);
     ctx.restore();
 
-    if (focused || this.player.overdrive > 0) {
-      const hitY = this.player.y + 10;
+    if (focused) {
+      const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
+      const pulse = (Math.sin(this.time * 9) + 1) / 2;
       ctx.save();
-      ctx.strokeStyle = this.player.overdrive > 0 ? "#ffd66d" : "#ffffff";
-      ctx.lineWidth = 2;
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#ff334d";
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = "#ff334d";
       ctx.beginPath();
-      ctx.arc(this.player.x, hitY, 5 + Math.sin(this.time * 8) * 0.8, 0, TAU);
+      ctx.arc(this.player.x, hitY, PLAYER_HIT_RADIUS + pulse * 0.7, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 5;
+      ctx.strokeStyle = "#fff5f2";
+      ctx.lineWidth = 1.6;
       ctx.stroke();
-      ctx.globalAlpha = 0.25;
+      ctx.globalAlpha = 0.72 - pulse * 0.22;
+      ctx.strokeStyle = "#ff7a83";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(this.player.x, hitY, 10 + pulse * 3, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = "#ff6673";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(this.player.x, hitY, this.stats.grazeRadius, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.player.overdrive > 0) {
+      const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
+      ctx.save();
+      ctx.globalAlpha = 0.72;
+      ctx.strokeStyle = "#ffd66d";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#ffd66d";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(this.player.x, hitY, 16 + Math.sin(this.time * 8) * 2, 0, TAU);
       ctx.stroke();
       ctx.restore();
     }

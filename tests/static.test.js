@@ -68,6 +68,24 @@ test("ホームは正面アトラス、戦闘は背面専用アトラスを使�
   assert.doesNotMatch(game, /:\s*"assets\/sprites\/boar-idle\.png"/);
 });
 
+test("表示枠は端末内で正しい9:16を保つ", () => {
+  const css = read("style.css");
+  const viewport = css.match(/#viewport\s*\{([\s\S]*?)\}/)[1];
+  assert.match(viewport, /width:\s*min\(100%,\s*calc\(100dvh \* 9 \/ 16\)\)/);
+  assert.match(viewport, /height:\s*auto/);
+  assert.match(viewport, /aspect-ratio:\s*9 \/ 16/);
+  assert.doesNotMatch(viewport, /max-width:/);
+});
+
+test("自機を拡大し、低速中は半透明の赤い当たり判定を描く", () => {
+  const game = read("src/game.js");
+  assert.match(game, /const PLAYER_DRAW_SIZE = 184/);
+  assert.match(game, /const PLAYER_FOCUS_DRAW_SIZE = 176/);
+  assert.match(game, /focused \? 0\.48 : 1/);
+  assert.match(game, /ctx\.fillStyle = "#ff334d"/);
+  assert.match(game, /bullet\.radius \+ PLAYER_HIT_RADIUS/);
+});
+
 test("自弾アトラスは4コマ・透過", () => {
   const path = resolve(root, "assets/sprites/player-shot.png");
   const info = execFileSync("identify", ["-format", "%wx%h %[channels] %[opaque]", path], { encoding: "utf8" });
