@@ -1,17 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  OPTION_TYPES,
   addItem,
+  addOption,
   applyRunRewards,
   buyUpgrade,
   createDefaultSave,
   dismantleItem,
+  dismantleOption,
   equipItem,
+  equipOption,
   generateLoot,
+  generateOptionDrop,
   getDerivedStats,
+  getEquippedOption,
   normalizeSave,
   rollRarity,
   statDescriptions,
+  unequipOption,
   upgradeCost,
 } from "../src/data.js";
 
@@ -69,6 +76,8 @@ test("壊れたセーブ値を安全な範囲へ正規化する", () => {
   assert.equal(save.level, 1);
   assert.equal(save.coins, 0);
   assert.equal(save.inventory.length, 3);
+  assert.deepEqual(save.optionInventory, []);
+  assert.equal(save.equippedOption, null);
   assert.equal(save.settings.sensitivity, 1.2);
 });
 
@@ -77,4 +86,23 @@ test("運気と深度は上位レアリティの抽選余地を持つ", () => {
   const high = rollRarity(3, 2, () => 0.99);
   assert.equal(low, "rough");
   assert.equal(high, "cursed");
+});
+
+test("随伴器は4種の弾道を持ち、通常装備とは別枠で装着・分解できる", () => {
+  const save = createDefaultSave();
+  assert.equal(save.equippedOption, null);
+  for (const optionType of Object.keys(OPTION_TYPES)) {
+    const option = generateOptionDrop({ stage: 2, optionType, rng: () => 0.42 });
+    assert.equal(option.kind, "option");
+    assert.equal(option.optionType, optionType);
+    assert.ok(option.power > 0);
+    assert.equal(addOption(save, option), true);
+  }
+  const selected = save.optionInventory[0];
+  assert.equal(equipOption(save, selected.id), true);
+  assert.equal(getEquippedOption(save).id, selected.id);
+  assert.equal(dismantleOption(save, selected.id).ok, false);
+  unequipOption(save);
+  assert.equal(dismantleOption(save, selected.id).ok, true);
+  assert.equal(save.optionInventory.length, 3);
 });

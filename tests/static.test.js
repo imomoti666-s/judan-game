@@ -35,7 +35,8 @@ test("PWAマニフェストとサービスワーカーのキャッシュ対象�
   const paths = [...shellBlock.matchAll(/\"([^\"]+)\"/g)].map((match) => match[1]);
   for (const path of paths) {
     if (path === "./") continue;
-    assert.ok(statSync(resolve(root, path)).isFile(), `${path} exists`);
+    const filePath = path.split("?")[0];
+    assert.ok(statSync(resolve(root, filePath)).isFile(), `${path} exists`);
   }
 });
 
@@ -77,13 +78,28 @@ test("表示枠は端末内で正しい9:16を保つ", () => {
   assert.doesNotMatch(viewport, /max-width:/);
 });
 
-test("自機を拡大し、低速中は半透明の赤い当たり判定を描く", () => {
+test("自機を拡大し、高速・低速の両方で半透明の赤い当たり判定を描く", () => {
   const game = read("src/game.js");
   assert.match(game, /const PLAYER_DRAW_SIZE = 184/);
   assert.match(game, /const PLAYER_FOCUS_DRAW_SIZE = 176/);
-  assert.match(game, /focused \? 0\.48 : 1/);
+  assert.match(game, /focused \? 0\.46 : 0\.62/);
   assert.match(game, /ctx\.fillStyle = "#ff334d"/);
   assert.match(game, /bullet\.radius \+ PLAYER_HIT_RADIUS/);
+});
+
+test("通常装備と独立した随伴器UIと4系統のショットが存在する", () => {
+  const html = read("index.html");
+  const data = read("src/data.js");
+  const game = read("src/game.js");
+  for (const id of ["option-bay", "option-count", "equipped-option", "option-list"]) {
+    assert.match(html, new RegExp(`id=[\"']${id}[\"']`));
+  }
+  for (const type of ["fan", "lance", "homing", "twin"]) {
+    assert.match(data, new RegExp(`${type}:\\s*\\{`));
+    assert.match(game, new RegExp(`type === [\"']${type}[\"']`));
+  }
+  assert.match(game, /generateOptionDrop/);
+  assert.match(game, /addOption/);
 });
 
 test("自弾アトラスは4コマ・透過", () => {

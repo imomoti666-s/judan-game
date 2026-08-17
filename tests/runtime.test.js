@@ -97,6 +97,16 @@ test("ブラウザ初期化後に出撃し、自動射撃とボス生成まで�
   game.updateGame(0.02);
   assert.ok(game.playerShots.length > 0);
 
+  const fastDrawCalls = [];
+  game.player.focus = false;
+  game.player.invincible = 0;
+  game.drawPlayer(canvasContext(fastDrawCalls));
+  const fastPlayerImage = fastDrawCalls.find((entry) => entry.type === "call" && entry.key === "drawImage");
+  assert.equal(fastPlayerImage.args[7], 184);
+  assert.equal(fastPlayerImage.args[8], 184);
+  assert.ok(fastDrawCalls.some((entry) => entry.type === "set" && entry.key === "globalAlpha" && entry.value === 0.62));
+  assert.ok(fastDrawCalls.some((entry) => entry.type === "set" && entry.key === "fillStyle" && entry.value === "#ff334d"));
+
   const focusDrawCalls = [];
   game.player.focus = true;
   game.player.invincible = 0;
@@ -104,8 +114,18 @@ test("ブラウザ初期化後に出撃し、自動射撃とボス生成まで�
   const playerImage = focusDrawCalls.find((entry) => entry.type === "call" && entry.key === "drawImage");
   assert.equal(playerImage.args[7], 176);
   assert.equal(playerImage.args[8], 176);
-  assert.ok(focusDrawCalls.some((entry) => entry.type === "set" && entry.key === "globalAlpha" && entry.value === 0.48));
+  assert.ok(focusDrawCalls.some((entry) => entry.type === "set" && entry.key === "globalAlpha" && entry.value === 0.46));
   assert.ok(focusDrawCalls.some((entry) => entry.type === "set" && entry.key === "fillStyle" && entry.value === "#ff334d"));
+
+  const expectedShotCounts = { fan: 5, lance: 1, homing: 3, twin: 3 };
+  for (const [optionType, count] of Object.entries(expectedShotCounts)) {
+    game.option = { optionType, power: 1 };
+    game.playerShots = [];
+    game.firePlayerShots(false);
+    assert.equal(game.playerShots.length, count, optionType);
+    assert.ok(game.playerShots.every((shot) => shot.type === optionType));
+  }
+  assert.ok(game.playerShots.every((shot) => shot.x !== undefined));
 
   const bombs = game.player.bombs;
   game.useBomb();
@@ -115,4 +135,8 @@ test("ブラウザ初期化後に出撃し、自動射撃とボス生成まで�
   game.updateSpawning(0.02);
   assert.ok(game.boss);
   assert.equal(game.enemies.includes(game.boss), true);
+
+  game.finishRun(true);
+  assert.match(elements.get("#modal-card").innerHTML, /随伴器/);
+  assert.match(elements.get("#modal-card").innerHTML, /data-loot-index/);
 });

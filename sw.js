@@ -1,10 +1,10 @@
-const CACHE_NAME = "judan-v0.1.2";
+const CACHE_NAME = "judan-v0.2.0";
 const APP_SHELL = [
   "./",
   "index.html",
-  "style.css",
-  "src/data.js",
-  "src/game.js",
+  "style.css?v=0.2.0",
+  "src/data.js?v=0.2.0",
+  "src/game.js?v=0.2.0",
   "manifest.webmanifest",
   "assets/sprites/boar-idle.png",
   "assets/sprites/boar-combat-idle.png",
@@ -32,6 +32,18 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./"))),
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();

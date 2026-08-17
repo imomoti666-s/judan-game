@@ -1,23 +1,32 @@
 import {
   MAX_INVENTORY,
+  MAX_OPTION_INVENTORY,
+  OPTION_TYPES,
   RARITIES,
   SLOT_META,
   addItem,
+  addOption,
   applyRunRewards,
   buyUpgrade,
   dismantleItem,
+  dismantleOption,
   equipItem,
+  equipOption,
   generateLoot,
+  generateOptionDrop,
   getDerivedStats,
   getEquippedItems,
+  getEquippedOption,
   getUpgradeMeta,
   loadSave,
   normalizeSave,
+  optionDescription,
   persistSave,
   statDescriptions,
+  unequipOption,
   upgradeCost,
   xpToNext,
-} from "./data.js";
+} from "./data.js?v=0.2.0";
 
 const WIDTH = 450;
 const HEIGHT = 800;
@@ -105,7 +114,9 @@ class JudanGame {
     requestAnimationFrame((now) => this.loop(now));
 
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js?v=0.2.0").then((registration) => registration.update()).catch(() => {});
+      });
     }
   }
 
@@ -138,6 +149,10 @@ class JudanGame {
       inventoryCount: document.querySelector("#inventory-count"),
       equippedList: document.querySelector("#equipped-list"),
       inventoryList: document.querySelector("#inventory-list"),
+      optionBay: document.querySelector("#option-bay"),
+      optionCount: document.querySelector("#option-count"),
+      equippedOption: document.querySelector("#equipped-option"),
+      optionList: document.querySelector("#option-list"),
       volume: document.querySelector("#volume-setting"),
       sensitivity: document.querySelector("#sensitivity-setting"),
       shake: document.querySelector("#shake-setting"),
@@ -215,6 +230,37 @@ class JudanGame {
           this.showToast(`分解して欠片 ${result.value} を得た`);
           this.renderMenu();
         }
+      }
+    });
+
+    this.dom.optionBay.addEventListener("click", (event) => {
+      const equip = event.target.closest("[data-equip-option]");
+      const unequip = event.target.closest("[data-unequip-option]");
+      const dismantle = event.target.closest("[data-dismantle-option]");
+      if (equip && equipOption(this.save, equip.dataset.equipOption)) {
+        persistSave(this.save);
+        this.showToast("随伴器を接続した――弾道が変わるぞ");
+        this.renderMenu();
+        return;
+      }
+      if (unequip) {
+        unequipOption(this.save);
+        persistSave(this.save);
+        this.showToast("随伴器を解除した");
+        this.renderMenu();
+        return;
+      }
+      if (!dismantle) return;
+      const item = this.save.optionInventory.find((entry) => entry.id === dismantle.dataset.dismantleOption);
+      if (!item) return;
+      const rarity = RARITIES[item.rarity];
+      const needsConfirm = ["secret", "relic", "cursed"].includes(item.rarity);
+      if (needsConfirm && !window.confirm(`${rarity.label}「${item.name}」を分解するか？`)) return;
+      const result = dismantleOption(this.save, item.id);
+      if (result.ok) {
+        persistSave(this.save);
+        this.showToast(`随伴器を分解し、欠片 ${result.value} を得た`);
+        this.renderMenu();
       }
     });
 
@@ -301,10 +347,12 @@ class JudanGame {
   renderMenu() {
     const stats = getDerivedStats(this.save);
     const equipped = getEquippedItems(this.save);
+    const equippedOption = getEquippedOption(this.save);
     this.dom.levelLabel.textContent = `鍛錬 ${this.save.level} ・ ${this.save.xp}/${xpToNext(this.save.level)}`;
     this.dom.coinLabel.textContent = `欠片 ${this.save.coins}`;
     this.dom.trainingCoins.textContent = `欠片 ${this.save.coins}`;
     this.dom.inventoryCount.textContent = `${this.save.inventory.length} / ${MAX_INVENTORY}`;
+    this.dom.optionCount.textContent = `${this.save.optionInventory.length} / ${MAX_OPTION_INVENTORY}`;
     this.dom.volume.value = this.save.settings.volume;
     this.dom.sensitivity.value = this.save.settings.sensitivity;
     this.dom.shake.checked = Boolean(this.save.settings.shake);
@@ -334,6 +382,16 @@ class JudanGame {
         <button class="tiny-button" data-upgrade="${key}">${cost}</button>
       </article>`;
     }).join("");
+
+    this.dom.equippedOption.innerHTML = equippedOption
+      ? this.optionCardHtml(equippedOption, true)
+      : `<article class="option-card is-empty"><div class="option-icon">基</div><div><h4>随伴器なし</h4><p>基本の双牙弾を使用する。ステージ踏破で随伴器が候補へ現れる。</p></div></article>`;
+    const sortedOptions = [...this.save.optionInventory]
+      .filter((item) => item.id !== equippedOption?.id)
+      .sort((a, b) => RARITIES[b.rarity].value - RARITIES[a.rarity].value);
+    this.dom.optionList.innerHTML = sortedOptions.length
+      ? sortedOptions.map((item) => this.optionCardHtml(item)).join("")
+      : `<p class="tip">未接続の随伴器はない。異形核を破壊して持ち帰れ。</p>`;
 
     this.dom.equippedList.innerHTML = Object.entries(SLOT_META).map(([slot, meta]) => {
       const item = equipped[slot];
@@ -366,6 +424,24 @@ class JudanGame {
     </article>`;
   }
 
+  optionCardHtml(item, isEquipped = false, choice = false) {
+    const rarity = RARITIES[item.rarity];
+    const meta = OPTION_TYPES[item.optionType];
+    const actions = choice
+      ? ""
+      : `<div class="gear-actions">
+          ${isEquipped
+            ? `<button class="tiny-button" data-unequip-option>解除</button>`
+            : `<button class="tiny-button" data-equip-option="${escapeHtml(item.id)}">接続</button>
+              <button class="tiny-button danger" data-dismantle-option="${escapeHtml(item.id)}">分解</button>`}
+        </div>`;
+    return `<article class="option-card ${isEquipped ? "is-equipped" : ""}" style="--option-color:${meta.color}">
+      <div class="option-icon">${meta.icon}</div>
+      <div><p class="eyebrow">${rarity.label}・随伴器</p><h4>${escapeHtml(item.name)}</h4><p>${escapeHtml(optionDescription(item))}</p></div>
+      ${actions}
+    </article>`;
+  }
+
   startRun(stageId) {
     if (!this.assetsReady) {
       this.showToast("素材を読み込んでおる。少し待て");
@@ -376,6 +452,7 @@ class JudanGame {
     this.resumeAudio();
     this.stage = stage;
     this.stats = getDerivedStats(this.save);
+    this.option = getEquippedOption(this.save);
     this.state = "playing";
     this.paused = false;
     this.menuToGame(true);
@@ -416,7 +493,8 @@ class JudanGame {
     this.dom.hudStage.textContent = stage.name;
     this.dom.bossWrap.classList.add("is-hidden");
     this.updateHud();
-    this.showFloatingBanner(`危険度 ${stage.id}　${stage.name}`);
+    const optionLabel = this.option ? `　随伴・${OPTION_TYPES[this.option.optionType].label}` : "";
+    this.showFloatingBanner(`危険度 ${stage.id}　${stage.name}${optionLabel}`);
     this.tone(260, 0.12, "triangle", 0.12);
     this.tone(390, 0.16, "triangle", 0.09, 0.08);
   }
@@ -489,7 +567,13 @@ class JudanGame {
 
     this.player.fireTimer -= dt;
     const overdriveRate = this.player.overdrive > 0 ? 1.72 : 1;
-    const interval = this.stats.fireInterval / overdriveRate;
+    const optionInterval = {
+      fan: 1.12,
+      lance: 1.78,
+      homing: 1.08,
+      twin: 0.94,
+    }[this.option?.optionType] || 1;
+    const interval = this.stats.fireInterval * optionInterval / overdriveRate;
     while (this.player.fireTimer <= 0) {
       this.firePlayerShots(focused);
       this.player.fireTimer += interval;
@@ -497,25 +581,102 @@ class JudanGame {
   }
 
   firePlayerShots(focused) {
-    const count = this.stats.projectiles + (this.player.overdrive > 0 ? 1 : 0);
-    const spread = focused ? this.stats.spread * 0.36 : this.stats.spread;
-    const damage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
-    for (let i = 0; i < count; i += 1) {
-      const angle = (i - (count - 1) / 2) * spread;
-      const speed = 670;
-      this.playerShots.push({
-        x: this.player.x + (i - (count - 1) / 2) * 7,
-        y: this.player.y - 44,
-        vx: Math.sin(angle) * speed,
-        vy: -Math.cos(angle) * speed,
-        damage,
-        radius: 8,
-        hitsLeft: this.stats.pierce,
-        hitIds: new Set(),
+    const baseCount = this.stats.projectiles + (this.player.overdrive > 0 ? 1 : 0);
+    const baseDamage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
+    const optionPower = Number(this.option?.power || 1);
+    const type = this.option?.optionType;
+
+    if (type === "fan") {
+      const count = 5 + Math.max(0, baseCount - 2);
+      const spread = focused ? 0.065 : 0.15;
+      for (let i = 0; i < count; i += 1) {
+        this.addPlayerShot({
+          x: this.player.x,
+          y: this.player.y - 42,
+          angle: (i - (count - 1) / 2) * spread,
+          speed: focused ? 710 : 625,
+          damage: baseDamage * optionPower * 0.48,
+          radius: 7,
+          hitsLeft: this.stats.pierce,
+          type: "fan",
+        });
+      }
+    } else if (type === "lance") {
+      const projectileBonus = 1 + Math.max(0, baseCount - 2) * 0.18;
+      this.addPlayerShot({
+        x: this.player.x,
+        y: this.player.y - 54,
+        angle: 0,
+        speed: 760,
+        damage: baseDamage * optionPower * 2.8 * projectileBonus,
+        radius: 15,
+        hitsLeft: this.stats.pierce + 5,
+        type: "lance",
       });
+    } else if (type === "homing") {
+      const count = Math.max(3, baseCount);
+      const spread = focused ? 0.07 : 0.17;
+      for (let i = 0; i < count; i += 1) {
+        this.addPlayerShot({
+          x: this.player.x + (i - (count - 1) / 2) * 12,
+          y: this.player.y - 40,
+          angle: (i - (count - 1) / 2) * spread,
+          speed: 540,
+          damage: baseDamage * optionPower * 0.66,
+          radius: 8,
+          hitsLeft: this.stats.pierce,
+          type: "homing",
+          turnRate: focused ? 6.2 : 4.6,
+        });
+      }
+    } else if (type === "twin") {
+      const lane = focused ? 34 : 50;
+      const lanes = [-lane, 0, lane];
+      for (const offset of lanes) {
+        this.addPlayerShot({
+          x: this.player.x + offset,
+          y: this.player.y - (offset ? 20 : 45),
+          angle: focused ? -offset * 0.0008 : 0,
+          speed: 690,
+          damage: baseDamage * optionPower * 0.7 * (1 + Math.max(0, baseCount - 2) * 0.12),
+          radius: 8,
+          hitsLeft: this.stats.pierce,
+          type: "twin",
+        });
+      }
+    } else {
+      const spread = focused ? this.stats.spread * 0.36 : this.stats.spread;
+      for (let i = 0; i < baseCount; i += 1) {
+        this.addPlayerShot({
+          x: this.player.x + (i - (baseCount - 1) / 2) * 7,
+          y: this.player.y - 44,
+          angle: (i - (baseCount - 1) / 2) * spread,
+          speed: 670,
+          damage: baseDamage,
+          radius: 8,
+          hitsLeft: this.stats.pierce,
+          type: "base",
+        });
+      }
     }
     this.shotSoundTick += 1;
     if (this.shotSoundTick % 5 === 0) this.tone(420, 0.025, "triangle", 0.018);
+  }
+
+  addPlayerShot({ x, y, angle, speed, damage, radius, hitsLeft, type, turnRate = 0 }) {
+    this.playerShots.push({
+      x,
+      y,
+      vx: Math.sin(angle) * speed,
+      vy: -Math.cos(angle) * speed,
+      damage,
+      radius,
+      hitsLeft,
+      type,
+      turnRate,
+      age: 0,
+      hitIds: new Set(),
+    });
   }
 
   updateSpawning(dt) {
@@ -718,10 +879,38 @@ class JudanGame {
 
   updatePlayerShots(dt) {
     for (const shot of this.playerShots) {
+      shot.age += dt;
+      if (shot.turnRate > 0 && this.enemies.length) {
+        let target = null;
+        let nearest = Infinity;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const distance = distanceSq(shot.x, shot.y, enemy.x, enemy.y);
+          if (distance < nearest) {
+            nearest = distance;
+            target = enemy;
+          }
+        }
+        if (target) {
+          const speed = Math.hypot(shot.vx, shot.vy);
+          const current = Math.atan2(shot.vy, shot.vx);
+          const desired = Math.atan2(target.y - shot.y, target.x - shot.x);
+          const difference = Math.atan2(Math.sin(desired - current), Math.cos(desired - current));
+          const angle = current + clamp(difference, -shot.turnRate * dt, shot.turnRate * dt);
+          shot.vx = Math.cos(angle) * speed;
+          shot.vy = Math.sin(angle) * speed;
+        }
+      }
       shot.x += shot.vx * dt;
       shot.y += shot.vy * dt;
     }
-    this.playerShots = this.playerShots.filter((shot) => shot.y > -110 && shot.x > -80 && shot.x < WIDTH + 80 && shot.hitsLeft >= -1);
+    this.playerShots = this.playerShots.filter((shot) => (
+      shot.y > -160
+      && shot.y < HEIGHT + 120
+      && shot.x > -160
+      && shot.x < WIDTH + 160
+      && shot.hitsLeft >= -1
+    ));
   }
 
   updateEnemyBullets(dt) {
@@ -921,6 +1110,7 @@ class JudanGame {
     this.drawEnemies(ctx);
     this.drawEnemyBullets(ctx);
     this.drawParticles(ctx);
+    this.drawPlayerOption(ctx);
     this.drawPlayer(ctx);
     this.drawFloatingTexts(ctx);
     ctx.restore();
@@ -958,7 +1148,7 @@ class JudanGame {
     const image = this.images[state];
     const size = focused ? PLAYER_FOCUS_DRAW_SIZE : PLAYER_DRAW_SIZE;
     const invincibilityFlicker = this.player.invincible > 0 && Math.floor(this.time * 18) % 2;
-    const alpha = (focused ? 0.48 : 1) * (invincibilityFlicker ? 0.42 : 1);
+    const alpha = (focused ? 0.46 : 0.62) * (invincibilityFlicker ? 0.42 : 1);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = this.player.overdrive > 0 ? "#ffd66d" : "#45d7c2";
@@ -966,34 +1156,34 @@ class JudanGame {
     ctx.drawImage(image, frame * 256, 0, 256, 256, this.player.x - size / 2, this.player.y - size * 0.6, size, size);
     ctx.restore();
 
+    const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
+    const pulse = (Math.sin(this.time * 9) + 1) / 2;
+    ctx.save();
+    ctx.shadowColor = "#ff334d";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#ff334d";
+    ctx.beginPath();
+    ctx.arc(this.player.x, hitY, PLAYER_HIT_RADIUS + pulse * 0.7, 0, TAU);
+    ctx.fill();
+    ctx.shadowBlur = 5;
+    ctx.strokeStyle = "#fff5f2";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.globalAlpha = (focused ? 0.72 : 0.5) - pulse * 0.18;
+    ctx.strokeStyle = "#ff7a83";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(this.player.x, hitY, 10 + pulse * 3, 0, TAU);
+    ctx.stroke();
     if (focused) {
-      const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
-      const pulse = (Math.sin(this.time * 9) + 1) / 2;
-      ctx.save();
-      ctx.shadowColor = "#ff334d";
-      ctx.shadowBlur = 16;
-      ctx.fillStyle = "#ff334d";
-      ctx.beginPath();
-      ctx.arc(this.player.x, hitY, PLAYER_HIT_RADIUS + pulse * 0.7, 0, TAU);
-      ctx.fill();
-      ctx.shadowBlur = 5;
-      ctx.strokeStyle = "#fff5f2";
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-      ctx.globalAlpha = 0.72 - pulse * 0.22;
-      ctx.strokeStyle = "#ff7a83";
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(this.player.x, hitY, 10 + pulse * 3, 0, TAU);
-      ctx.stroke();
       ctx.globalAlpha = 0.22;
       ctx.strokeStyle = "#ff6673";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(this.player.x, hitY, this.stats.grazeRadius, 0, TAU);
       ctx.stroke();
-      ctx.restore();
     }
+    ctx.restore();
 
     if (this.player.overdrive > 0) {
       const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
@@ -1010,16 +1200,81 @@ class JudanGame {
     }
   }
 
+  drawPlayerOption(ctx) {
+    if (!this.player || !this.option) return;
+    const meta = OPTION_TYPES[this.option.optionType];
+    if (!meta) return;
+    const focused = this.player.focus || this.keys.has("shift");
+    let positions;
+    if (this.option.optionType === "homing") {
+      const radius = focused ? 36 : 51;
+      const angle = this.time * (focused ? 1.6 : 2.7);
+      positions = [
+        [Math.cos(angle) * radius, Math.sin(angle) * 18 - 6],
+        [Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * 18 - 6],
+      ];
+    } else if (this.option.optionType === "lance") {
+      positions = [[0, -58]];
+    } else {
+      const distance = focused ? 35 : 51;
+      positions = [[-distance, -4], [distance, -4]];
+    }
+
+    ctx.save();
+    ctx.strokeStyle = meta.color;
+    ctx.fillStyle = meta.color;
+    ctx.shadowColor = meta.color;
+    ctx.shadowBlur = 13;
+    ctx.lineWidth = 1.3;
+    for (const [offsetX, offsetY] of positions) {
+      const x = this.player.x + offsetX;
+      const y = this.player.y + offsetY;
+      ctx.globalAlpha = 0.24;
+      ctx.beginPath();
+      ctx.moveTo(this.player.x, this.player.y - 5);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.globalAlpha = 0.9;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(this.time * 2.4 + offsetX * 0.01);
+      ctx.beginPath();
+      if (this.option.optionType === "fan") {
+        this.polygon(ctx, 4, 10, Math.PI / 4);
+      } else if (this.option.optionType === "lance") {
+        this.polygon(ctx, 3, 13, -Math.PI / 2);
+      } else if (this.option.optionType === "twin") {
+        this.polygon(ctx, 6, 11, Math.PI / 6);
+      } else {
+        ctx.arc(0, 0, 9, 0, TAU);
+      }
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.88)";
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   drawPlayerShots(ctx) {
     if (!this.assetsReady) return;
     const image = this.images.shot;
     const frame = Math.floor(this.time * 14) % 4;
     for (const shot of this.playerShots) {
+      const visual = {
+        base: { width: 28, height: 42, color: "#ffb13e" },
+        fan: { width: 21, height: 33, color: "#5ee1bf" },
+        lance: { width: 48, height: 82, color: "#ff8068" },
+        homing: { width: 26, height: 39, color: "#68bfff" },
+        twin: { width: 25, height: 41, color: "#c28bff" },
+      }[shot.type] || { width: 28, height: 42, color: "#ffb13e" };
       ctx.save();
+      ctx.translate(shot.x, shot.y);
+      ctx.rotate(Math.atan2(shot.vy, shot.vx) + Math.PI / 2);
       ctx.globalCompositeOperation = "lighter";
-      ctx.shadowColor = "#ffb13e";
-      ctx.shadowBlur = 9;
-      ctx.drawImage(image, frame * 64, 0, 64, 96, shot.x - 14, shot.y - 27, 28, 42);
+      ctx.shadowColor = visual.color;
+      ctx.shadowBlur = shot.type === "lance" ? 16 : 9;
+      ctx.drawImage(image, frame * 64, 0, 64, 96, -visual.width / 2, -visual.height * 0.66, visual.width, visual.height);
       ctx.restore();
     }
   }
@@ -1193,22 +1448,29 @@ class JudanGame {
     const coins = Math.floor((this.runCoins + this.kills * 2 + (success ? 45 * this.stage.id : 10)) * survivalRatio * this.stage.reward);
     const xp = Math.floor((this.runXp + this.kills * 3 + (success ? 70 * this.stage.id : 15)) * survivalRatio);
     const levels = applyRunRewards(this.save, { coins, xp, cleared: success, stage: this.stage.id });
+    const lootStage = success ? this.stage.id : Math.max(1, this.stage.id - 1);
     const choices = retreated
       ? []
-      : Array.from({ length: success ? 3 : 1 }, () => generateLoot({
-          stage: success ? this.stage.id : Math.max(1, this.stage.id - 1),
+      : Array.from({ length: success ? 2 : 1 }, () => generateLoot({
+          stage: lootStage,
           lootBonus: this.stats.lootBonus,
         }));
+    if (success) {
+      choices.push(generateOptionDrop({
+        stage: lootStage,
+        lootBonus: this.stats.lootBonus,
+      }));
+    }
     persistSave(this.save);
 
     const title = retreated ? "撤収" : success ? "踏破" : "力尽きた";
     const message = retreated
       ? "持ち帰れるものだけを確保した。欲を抑えるのも腕のうちだ。"
       : success
-        ? "異形核を砕いた。持ち帰る戦利品を一つ選べ。"
+        ? "異形核を砕いた。通常装備か、弾道を変える随伴器を一つ選べ。"
         : "鍛錬と欠片は残る。回収できた品を一つ持ち帰れる。";
     const lootHtml = choices.length
-      ? `<div class="loot-choices">${choices.map((item, index) => `<button class="loot-choice" data-loot-index="${index}">${this.gearCardHtml(item, false, true)}</button>`).join("")}</div>`
+      ? `<div class="loot-choices">${choices.map((item, index) => `<button class="loot-choice" data-loot-index="${index}">${item.kind === "option" ? this.optionCardHtml(item, false, true) : this.gearCardHtml(item, false, true)}</button>`).join("")}</div>`
       : "";
     this.showModal(`<p class="eyebrow">SORTIE RESULT</p><h2>${title}</h2><p>${message}${levels ? `　鍛錬が ${levels} 上がった。` : ""}</p>
       <div class="result-stats"><div><strong>${this.kills}</strong><span>撃破</span></div><div><strong>${coins}</strong><span>欠片</span></div><div><strong>${xp}</strong><span>鍛錬</span></div></div>
@@ -1219,7 +1481,8 @@ class JudanGame {
       button.addEventListener("click", () => {
         const item = choices[Number(button.dataset.lootIndex)];
         if (!item) return;
-        if (addItem(this.save, item)) {
+        const collected = item.kind === "option" ? addOption(this.save, item) : addItem(this.save, item);
+        if (collected) {
           this.showToast(`${item.name}を回収した`);
         } else {
           this.save.coins += item.value;

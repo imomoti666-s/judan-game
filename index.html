@@ -8,7 +8,7 @@
     <title>獣弾 -JUDAN-</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/ui/icon-192.png" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=0.2.0" />
   </head>
   <body>
     <main id="app" aria-label="獣弾 ゲーム画面">
@@ -70,7 +70,7 @@
               </div>
               <div id="stat-strip" class="stat-strip"></div>
               <div id="stage-list" class="stage-list"></div>
-              <p class="tip">画面内をドラッグして移動。低速中は当たり判定が見え、かすりで炉心が満ちる。</p>
+              <p class="tip">画面内をドラッグして移動。赤点が実際の当たり判定だ。低速中のかすりで炉心が大きく満ちる。</p>
             </section>
 
             <section id="panel-training" class="panel" data-panel="training">
@@ -83,9 +83,18 @@
 
             <section id="panel-gear" class="panel" data-panel="gear">
               <div class="section-heading">
-                <div><p class="eyebrow">戦利品</p><h2>弾道を組み替える</h2></div>
+                <div><p class="eyebrow">戦利品</p><h2>装備と弾道を組み替える</h2></div>
                 <span id="inventory-count">0 / 24</span>
               </div>
+              <section id="option-bay" class="option-bay" aria-label="随伴オプション">
+                <div class="option-bay-heading">
+                  <div><p class="eyebrow">SHOT OPTION</p><h3>随伴器</h3></div>
+                  <span id="option-count">0 / 12</span>
+                </div>
+                <div id="equipped-option"></div>
+                <div id="option-list" class="option-list"></div>
+              </section>
+              <p class="equipment-label">通常装備</p>
               <div id="equipped-list" class="equipped-list"></div>
               <div id="inventory-list" class="inventory-list"></div>
             </section>
@@ -112,6 +121,6 @@
         <div id="orientation-warning"><strong>縦向きに戻すのだ</strong><span>『獣弾』は縦画面固定だ。</span></div>
       </div>
     </main>
-    <script type="module" src="src/game.js"></script>
+    <script type="module" src="src/game.js?v=0.2.0"></script>
   </body>
 </html>

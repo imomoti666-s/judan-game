@@ -1,5 +1,6 @@
 export const SAVE_KEY = "judan-save-v1";
 export const MAX_INVENTORY = 24;
+export const MAX_OPTION_INVENTORY = 12;
 
 export const SLOT_META = {
   weapon: { label: "牙砲", icon: "牙" },
@@ -13,6 +14,37 @@ export const RARITIES = {
   secret: { label: "秘造", color: "#58aef0", affixes: 3, value: 110, multiplier: 1.15 },
   relic: { label: "遺物", color: "#b785ff", affixes: 4, value: 230, multiplier: 1.32 },
   cursed: { label: "厄物", color: "#ff735f", affixes: 4, value: 360, multiplier: 1.52 },
+};
+
+export const OPTION_TYPES = {
+  fan: {
+    label: "翠牙扇",
+    icon: "扇",
+    color: "#5ee1bf",
+    shotLabel: "五裂散弾",
+    description: "前方を広く薙ぐ五方向弾。低速中は扇が狭まり、正面へ収束する。",
+  },
+  lance: {
+    label: "穿城牙",
+    icon: "杭",
+    color: "#ff8068",
+    shotLabel: "大型貫通杭",
+    description: "連射を捨て、敵をまとめて穿つ巨大な一本牙へ変える。",
+  },
+  homing: {
+    label: "追魂灯",
+    icon: "追",
+    color: "#68bfff",
+    shotLabel: "追尾牙弾",
+    description: "敵を探して弧を描く追尾弾。動き回る相手への命中を優先する。",
+  },
+  twin: {
+    label: "双衛輪",
+    icon: "双",
+    color: "#c28bff",
+    shotLabel: "左右随伴砲",
+    description: "自機の左右へ二基の砲輪を展開し、三列の平行射撃を行う。",
+  },
 };
 
 const BASES = {
@@ -88,7 +120,7 @@ export function createStarterItems() {
 export function createDefaultSave() {
   const inventory = createStarterItems();
   return {
-    version: 1,
+    version: 2,
     level: 1,
     xp: 0,
     coins: 0,
@@ -96,6 +128,8 @@ export function createDefaultSave() {
     bestStage: 0,
     upgrades: { power: 0, body: 0, focus: 0 },
     inventory,
+    optionInventory: [],
+    equippedOption: null,
     equipped: {
       weapon: "starter-weapon",
       ward: "starter-ward",
@@ -111,6 +145,16 @@ export function normalizeSave(raw) {
   const inventory = Array.isArray(raw.inventory)
     ? raw.inventory.filter((item) => item && item.id && SLOT_META[item.slot] && RARITIES[item.rarity])
     : base.inventory;
+  const optionInventory = Array.isArray(raw.optionInventory)
+    ? raw.optionInventory.filter((item) => (
+        item
+        && item.id
+        && item.kind === "option"
+        && OPTION_TYPES[item.optionType]
+        && RARITIES[item.rarity]
+        && Number.isFinite(Number(item.power))
+      ))
+    : base.optionInventory;
 
   const merged = {
     ...base,
@@ -131,6 +175,8 @@ export function normalizeSave(raw) {
       shake: raw.settings?.shake === undefined ? base.settings.shake : Boolean(raw.settings.shake),
     },
     inventory,
+    optionInventory,
+    equippedOption: raw.equippedOption || null,
     equipped: { ...base.equipped, ...(raw.equipped || {}) },
   };
 
@@ -139,6 +185,7 @@ export function normalizeSave(raw) {
       merged.equipped[slot] = merged.inventory.find((item) => item.slot === slot)?.id || null;
     }
   }
+  if (!merged.optionInventory.some((item) => item.id === merged.equippedOption)) merged.equippedOption = null;
   return merged;
 }
 
@@ -281,6 +328,25 @@ export function generateLoot({ stage = 1, slot, lootBonus = 0, rng = Math.random
   };
 }
 
+export function generateOptionDrop({ stage = 1, optionType, lootBonus = 0, rng = Math.random } = {}) {
+  const selectedType = optionType || pick(Object.keys(OPTION_TYPES), rng);
+  const meta = OPTION_TYPES[selectedType];
+  if (!meta) return null;
+  const rarity = rollRarity(stage, lootBonus, rng);
+  const rarityData = RARITIES[rarity];
+  const variance = 0.96 + rng() * 0.08;
+  const power = Math.round((0.88 + stage * 0.045 + Math.max(0, lootBonus) * 0.16) * rarityData.multiplier * variance * 1000) / 1000;
+  return {
+    id: randomId(),
+    kind: "option",
+    optionType: selectedType,
+    rarity,
+    name: `${rarityData.label}・${meta.label}`,
+    power,
+    value: Math.round(rarityData.value * 1.55 * (1 + stage * 0.18)),
+  };
+}
+
 export function addItem(save, item) {
   if (save.inventory.length >= MAX_INVENTORY) return false;
   save.inventory.push(item);
@@ -311,6 +377,42 @@ export function getEquippedItems(save) {
       save.inventory.find((item) => item.id === save.equipped[slot]) || null,
     ]),
   );
+}
+
+export function addOption(save, item) {
+  if (!item || item.kind !== "option" || !OPTION_TYPES[item.optionType]) return false;
+  if (save.optionInventory.length >= MAX_OPTION_INVENTORY) return false;
+  save.optionInventory.push(item);
+  return true;
+}
+
+export function equipOption(save, itemId) {
+  const item = save.optionInventory.find((entry) => entry.id === itemId);
+  if (!item) return false;
+  save.equippedOption = item.id;
+  return true;
+}
+
+export function unequipOption(save) {
+  save.equippedOption = null;
+}
+
+export function dismantleOption(save, itemId) {
+  const index = save.optionInventory.findIndex((entry) => entry.id === itemId);
+  if (index < 0 || save.equippedOption === itemId) return { ok: false, value: 0 };
+  const [item] = save.optionInventory.splice(index, 1);
+  save.coins += item.value;
+  return { ok: true, value: item.value };
+}
+
+export function getEquippedOption(save) {
+  return save.optionInventory.find((item) => item.id === save.equippedOption) || null;
+}
+
+export function optionDescription(item) {
+  const meta = OPTION_TYPES[item?.optionType];
+  if (!meta) return "不明な随伴器";
+  return `${meta.shotLabel}・出力 ${Math.round(Number(item.power || 1) * 100)}%　${meta.description}`;
 }
 
 export function getDerivedStats(save) {
