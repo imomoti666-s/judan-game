@@ -46,9 +46,9 @@ button { color: inherit; }
 
 #viewport {
   position: relative;
-  width: min(100vw, calc(100dvh * 9 / 16));
-  height: min(100dvh, calc(100vw * 16 / 9));
-  max-width: 540px;
+  width: min(100%, calc(100dvh * 9 / 16));
+  height: auto;
+  max-height: 100%;
   aspect-ratio: 9 / 16;
   overflow: hidden;
   isolation: isolate;
