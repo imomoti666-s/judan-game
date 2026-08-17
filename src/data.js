@@ -21,29 +21,29 @@ export const OPTION_TYPES = {
     label: "翠牙扇",
     icon: "扇",
     color: "#5ee1bf",
-    shotLabel: "五裂散弾",
-    description: "前方を広く薙ぐ五方向弾。低速中は扇が狭まり、正面へ収束する。",
+    shotLabel: "副砲・五裂散弾",
+    description: "主砲の脇から前方を広く薙ぐ五方向弾。低速中は扇が狭まり、正面へ収束する。",
   },
   lance: {
     label: "穿城牙",
     icon: "杭",
     color: "#ff8068",
-    shotLabel: "大型貫通杭",
-    description: "連射を捨て、敵をまとめて穿つ巨大な一本牙へ変える。",
+    shotLabel: "副砲・大型貫通杭",
+    description: "主砲とは別周期で、敵をまとめて穿つ巨大な一本牙を撃ち込む。",
   },
   homing: {
     label: "追魂灯",
     icon: "追",
     color: "#68bfff",
-    shotLabel: "追尾牙弾",
-    description: "敵を探して弧を描く追尾弾。動き回る相手への命中を優先する。",
+    shotLabel: "副砲・追尾牙弾",
+    description: "威力と連射を抑えた二発の追尾弾。動き回る相手への命中を優先する。",
   },
   twin: {
     label: "双衛輪",
     icon: "双",
     color: "#c28bff",
-    shotLabel: "左右随伴砲",
-    description: "自機の左右へ二基の砲輪を展開し、三列の平行射撃を行う。",
+    shotLabel: "副砲・左右随伴砲",
+    description: "自機の左右へ二基の砲輪を展開し、主砲の外側へ平行射撃を加える。",
   },
 };
 
@@ -412,7 +412,7 @@ export function getEquippedOption(save) {
 export function optionDescription(item) {
   const meta = OPTION_TYPES[item?.optionType];
   if (!meta) return "不明な随伴器";
-  return `${meta.shotLabel}・出力 ${Math.round(Number(item.power || 1) * 100)}%　${meta.description}`;
+  return `${meta.shotLabel}・副砲出力 ${Math.round(Number(item.power || 1) * 100)}%　${meta.description}`;
 }
 
 export function getDerivedStats(save) {
