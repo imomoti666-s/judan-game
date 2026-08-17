@@ -117,14 +117,42 @@ test("ブラウザ初期化後に出撃し、自動射撃とボス生成まで�
   assert.ok(focusDrawCalls.some((entry) => entry.type === "set" && entry.key === "globalAlpha" && entry.value === 0.46));
   assert.ok(focusDrawCalls.some((entry) => entry.type === "set" && entry.key === "fillStyle" && entry.value === "#ff334d"));
 
-  const expectedShotCounts = { fan: 5, lance: 1, homing: 3, twin: 3 };
-  for (const [optionType, count] of Object.entries(expectedShotCounts)) {
+  game.player.focus = false;
+  game.option = { optionType: "homing", power: 1 };
+  game.playerShots = [];
+  game.player.fireTimer = 0;
+  game.player.optionFireTimer = 999;
+  game.updatePlayer(0.01);
+  assert.ok(game.playerShots.length > 0);
+  assert.ok(game.playerShots.every((shot) => shot.type === "base"));
+
+  game.playerShots = [];
+  game.player.fireTimer = 999;
+  game.player.optionFireTimer = 0;
+  game.updatePlayer(0.01);
+  assert.ok(game.playerShots.length > 0);
+  assert.ok(game.playerShots.every((shot) => shot.type === "homing"));
+
+  const expectedSubShotCounts = { fan: 5, lance: 1, homing: 2, twin: 2 };
+  const subDps = {};
+  game.playerShots = [];
+  game.fireMainShots(false);
+  const mainDps = game.playerShots.reduce((sum, shot) => sum + shot.damage, 0) / game.stats.fireInterval;
+  for (const [optionType, subCount] of Object.entries(expectedSubShotCounts)) {
     game.option = { optionType, power: 1 };
     game.playerShots = [];
-    game.firePlayerShots(false);
-    assert.equal(game.playerShots.length, count, optionType);
-    assert.ok(game.playerShots.every((shot) => shot.type === optionType));
+    game.fireMainShots(false);
+    game.fireOptionShots(false);
+    const mainShots = game.playerShots.filter((shot) => shot.type === "base");
+    const subShots = game.playerShots.filter((shot) => shot.type === optionType);
+    assert.equal(mainShots.length, game.stats.projectiles, `${optionType}: main`);
+    assert.equal(subShots.length, subCount, `${optionType}: sub`);
+    subDps[optionType] = subShots.reduce((sum, shot) => sum + shot.damage, 0) / game.getOptionFireInterval(optionType);
+    assert.ok(subDps[optionType] < mainDps * 0.35, `${optionType}: remains a sub-shot`);
   }
+  assert.ok(subDps.homing < subDps.fan);
+  assert.ok(subDps.homing < subDps.lance);
+  assert.ok(subDps.homing < subDps.twin);
   assert.ok(game.playerShots.every((shot) => shot.x !== undefined));
 
   const bombs = game.player.bombs;
