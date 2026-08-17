@@ -8,7 +8,7 @@
     <title>獣弾 -JUDAN-</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/ui/icon-192.png" />
-    <link rel="stylesheet" href="style.css?v=0.2.0" />
+    <link rel="stylesheet" href="style.css?v=0.2.1" />
   </head>
   <body>
     <main id="app" aria-label="獣弾 ゲーム画面">
@@ -83,7 +83,7 @@
 
             <section id="panel-gear" class="panel" data-panel="gear">
               <div class="section-heading">
-                <div><p class="eyebrow">戦利品</p><h2>装備と弾道を組み替える</h2></div>
+                <div><p class="eyebrow">戦利品</p><h2>装備と副砲を組み替える</h2></div>
                 <span id="inventory-count">0 / 24</span>
               </div>
               <section id="option-bay" class="option-bay" aria-label="随伴オプション">
@@ -93,6 +93,7 @@
                 </div>
                 <div id="equipped-option"></div>
                 <div id="option-list" class="option-list"></div>
+                <p class="tip">基本の双牙弾は常時発射され、随伴器は別周期の副砲を追加する。</p>
               </section>
               <p class="equipment-label">通常装備</p>
               <div id="equipped-list" class="equipped-list"></div>
@@ -121,6 +122,6 @@
         <div id="orientation-warning"><strong>縦向きに戻すのだ</strong><span>『獣弾』は縦画面固定だ。</span></div>
       </div>
     </main>
-    <script type="module" src="src/game.js?v=0.2.0"></script>
+    <script type="module" src="src/game.js?v=0.2.1"></script>
   </body>
 </html>
