@@ -22,7 +22,7 @@ export const OPTION_TYPES = {
     icon: "扇",
     color: "#5ee1bf",
     shotLabel: "副砲・五裂散弾",
-    description: "主砲の脇から前方を広く薙ぐ五方向弾。低速中は扇が狭まり、正面へ収束する。",
+    description: "主砲の脇から前方を広く薙ぐ五方向弾。集中射撃中は扇が狭まり、正面へ収束する。",
   },
   lance: {
     label: "穿城牙",
@@ -46,6 +46,66 @@ export const OPTION_TYPES = {
     description: "自機の左右へ二基の砲輪を展開し、主砲の外側へ平行射撃を加える。",
   },
 };
+
+export const STANCE_TYPES = {
+  seigaku: {
+    label: "静岳の構え",
+    icon: "岳",
+    color: "#7ed7b5",
+    description: "機動−10%。静止中は主砲威力+22%、7秒ごとに一度だけ被弾を無効化する。",
+  },
+  araga: {
+    label: "荒牙の構え",
+    icon: "荒",
+    color: "#ff8b68",
+    description: "通常射撃の連射+22%。集中射撃威力−10%、実当たり判定が少し大きくなる。",
+  },
+  suribi: {
+    label: "擦火の構え",
+    icon: "擦",
+    color: "#63d9e8",
+    description: "通常射撃威力−10%。集中時のかすり範囲+12、炉心獲得量+65%。",
+  },
+  chototsu: {
+    label: "猪突の構え",
+    icon: "突",
+    color: "#ffc266",
+    description: "上方へ進む間は機動・威力・連射が上昇し、後退中は威力が低下する。",
+  },
+};
+
+export const FANG_SIGILS = {
+  heavy: { label: "重牙", icon: "重", description: "主砲威力+35%、弾速−28%、弾の大きさ+2。" },
+  swift: { label: "早牙", icon: "早", description: "主砲の連射間隔−28%、威力−22%。" },
+  crossing: { label: "交牙", icon: "交", description: "左右の主砲が内側へ交差し、中央へ噛み合う。" },
+  afterfang: { label: "残牙", icon: "残", description: "主砲の後ろへ、32%威力の残像弾を追加する。" },
+  bloodfang: { label: "血牙", icon: "血", description: "失った耐久割合に応じ、主砲威力が最大55%上昇する。" },
+  misfire: { label: "不発牙", icon: "不", description: "22%で不発になる代わり、次の主砲が2.2倍になる。" },
+  convergence: { label: "凝牙", icon: "凝", description: "集中射撃がさらに収束し、主砲威力+12%。" },
+  scatter: { label: "乱牙", icon: "乱", description: "通常射撃の弾数+2、各弾の威力−24%。" },
+  doublebeat: { label: "双拍牙", icon: "拍", description: "主砲を3回撃つごとに、55%威力の追撃を放つ。" },
+  severance: { label: "断牙", icon: "断", description: "主砲威力−12%、貫通数+2。" },
+  recoil: { label: "震牙", icon: "震", description: "主砲威力+12%、弾速+25%。射撃時にわずかに後退する。" },
+  furnace: { label: "炉牙", icon: "炉", description: "主砲威力−8%。命中するたび炉心を0.55獲得する。" },
+};
+
+export const COMPANION_INSCRIPTIONS = {
+  convergence: { label: "寄星陣", icon: "寄", group: "formation", description: "随伴器を内側へ寄せ、副砲の拡散を半減して威力+10%。" },
+  expansion: { label: "散華陣", icon: "華", group: "formation", description: "随伴器を外側へ展開。攻撃範囲が広がる代わり威力−12%。" },
+  vanguard: { label: "先駆陣", icon: "先", group: "formation", description: "随伴器を前方へ配置し、連射+14%、威力−8%。" },
+  orbit: { label: "回天陣", icon: "回", group: "formation", description: "随伴器が自機を旋回。射点が常に動き、追尾性能も上昇する。" },
+  focusSync: { label: "集中共鳴", icon: "集", group: "trigger", description: "集中射撃中は副砲連射+30%、通常時は−18%。" },
+  normalSync: { label: "通常共鳴", icon: "常", group: "trigger", description: "通常射撃中は副砲連射+28%、集中時は−20%。" },
+  blaze: { label: "焔痕", icon: "焔", group: "property", description: "副砲命中時に継続ダメージを与える。" },
+  chill: { label: "霜縛", icon: "霜", group: "property", description: "副砲威力−8%。命中した敵の移動と射撃を一時的に遅らせる。" },
+  burst: { label: "爆芯", icon: "爆", group: "property", description: "副砲威力−10%。命中地点へ小規模な範囲ダメージを発生させる。" },
+  ricochet: { label: "連穿", icon: "連", group: "property", description: "副砲威力−12%、貫通数+2。" },
+  eraser: { label: "掃弾", icon: "掃", group: "property", description: "副砲威力−18%。副砲が小型の敵弾を相殺する。" },
+  furnace: { label: "炉脈", icon: "炉", group: "property", description: "副砲威力−10%。命中時に炉心を獲得する。" },
+};
+
+export const MAX_FANG_SIGILS = 2;
+export const MAX_COMPANION_INSCRIPTIONS = 2;
 
 const BASES = {
   weapon: ["牙灯", "穿ち牙", "散り牙", "脈動牙"],
@@ -82,7 +142,7 @@ const AFFIXES = {
 const UPGRADE_META = {
   power: { label: "牙砲鍛錬", icon: "牙", text: "基礎威力と連射を鍛える。" },
   body: { label: "肉体鍛錬", icon: "体", text: "耐久と初期護りを増やす。" },
-  focus: { label: "集中鍛錬", icon: "心", text: "低速時の威力とかすり範囲を伸ばす。" },
+  focus: { label: "集中鍛錬", icon: "心", text: "集中射撃時の威力とかすり範囲を伸ばす。" },
 };
 
 export function createStarterItems() {
@@ -120,7 +180,7 @@ export function createStarterItems() {
 export function createDefaultSave() {
   const inventory = createStarterItems();
   return {
-    version: 2,
+    version: 3,
     level: 1,
     xp: 0,
     coins: 0,
@@ -130,6 +190,11 @@ export function createDefaultSave() {
     inventory,
     optionInventory: [],
     equippedOption: null,
+    build: {
+      stance: "seigaku",
+      fangSigils: [],
+      companionInscriptions: [],
+    },
     equipped: {
       weapon: "starter-weapon",
       ward: "starter-ward",
@@ -155,10 +220,14 @@ export function normalizeSave(raw) {
         && Number.isFinite(Number(item.power))
       ))
     : base.optionInventory;
+  const rawBuild = raw.build && typeof raw.build === "object" ? raw.build : {};
+  const fangSigils = uniqueValid(rawBuild.fangSigils, FANG_SIGILS).slice(0, MAX_FANG_SIGILS);
+  const companionInscriptions = normalizeCompanionInscriptions(rawBuild.companionInscriptions);
 
   const merged = {
     ...base,
     ...raw,
+    version: 3,
     level: Math.max(1, Number(raw.level) || 1),
     xp: Math.max(0, Number(raw.xp) || 0),
     coins: Math.max(0, Math.floor(Number(raw.coins) || 0)),
@@ -177,6 +246,11 @@ export function normalizeSave(raw) {
     inventory,
     optionInventory,
     equippedOption: raw.equippedOption || null,
+    build: {
+      stance: STANCE_TYPES[rawBuild.stance] ? rawBuild.stance : base.build.stance,
+      fangSigils,
+      companionInscriptions,
+    },
     equipped: { ...base.equipped, ...(raw.equipped || {}) },
   };
 
@@ -187,6 +261,23 @@ export function normalizeSave(raw) {
   }
   if (!merged.optionInventory.some((item) => item.id === merged.equippedOption)) merged.equippedOption = null;
   return merged;
+}
+
+function uniqueValid(values, catalogue) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.filter((value) => catalogue[value]))];
+}
+
+function normalizeCompanionInscriptions(values) {
+  const normalized = [];
+  for (const id of uniqueValid(values, COMPANION_INSCRIPTIONS)) {
+    const group = COMPANION_INSCRIPTIONS[id].group;
+    if ((group === "formation" || group === "trigger")
+      && normalized.some((selected) => COMPANION_INSCRIPTIONS[selected].group === group)) continue;
+    normalized.push(id);
+    if (normalized.length >= MAX_COMPANION_INSCRIPTIONS) break;
+  }
+  return normalized;
 }
 
 function normalizeUpgrade(value) {
@@ -413,6 +504,56 @@ export function optionDescription(item) {
   const meta = OPTION_TYPES[item?.optionType];
   if (!meta) return "不明な随伴器";
   return `${meta.shotLabel}・副砲出力 ${Math.round(Number(item.power || 1) * 100)}%　${meta.description}`;
+}
+
+export function getBuildConfig(save) {
+  const normalized = normalizeSave(save);
+  return {
+    stance: normalized.build.stance,
+    fangSigils: [...normalized.build.fangSigils],
+    companionInscriptions: [...normalized.build.companionInscriptions],
+  };
+}
+
+export function setStance(save, stanceId) {
+  if (!STANCE_TYPES[stanceId]) return false;
+  save.build ||= createDefaultSave().build;
+  save.build.stance = stanceId;
+  return true;
+}
+
+export function toggleFangSigil(save, sigilId) {
+  if (!FANG_SIGILS[sigilId]) return { ok: false, reason: "unknown" };
+  save.build ||= createDefaultSave().build;
+  save.build.fangSigils = uniqueValid(save.build.fangSigils, FANG_SIGILS).slice(0, MAX_FANG_SIGILS);
+  const index = save.build.fangSigils.indexOf(sigilId);
+  if (index >= 0) {
+    save.build.fangSigils.splice(index, 1);
+    return { ok: true, equipped: false };
+  }
+  if (save.build.fangSigils.length >= MAX_FANG_SIGILS) return { ok: false, reason: "full" };
+  save.build.fangSigils.push(sigilId);
+  return { ok: true, equipped: true };
+}
+
+export function toggleCompanionInscription(save, inscriptionId) {
+  const meta = COMPANION_INSCRIPTIONS[inscriptionId];
+  if (!meta) return { ok: false, reason: "unknown" };
+  save.build ||= createDefaultSave().build;
+  save.build.companionInscriptions = normalizeCompanionInscriptions(save.build.companionInscriptions);
+  const selected = save.build.companionInscriptions;
+  const index = selected.indexOf(inscriptionId);
+  if (index >= 0) {
+    selected.splice(index, 1);
+    return { ok: true, equipped: false };
+  }
+  if (meta.group === "formation" || meta.group === "trigger") {
+    const conflict = selected.findIndex((id) => COMPANION_INSCRIPTIONS[id]?.group === meta.group);
+    if (conflict >= 0) selected.splice(conflict, 1);
+  }
+  if (selected.length >= MAX_COMPANION_INSCRIPTIONS) return { ok: false, reason: "full" };
+  selected.push(inscriptionId);
+  return { ok: true, equipped: true };
 }
 
 export function getDerivedStats(save) {
