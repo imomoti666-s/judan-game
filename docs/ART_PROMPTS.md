@@ -22,7 +22,7 @@
 - `boar-combat-down.png`：敵へ背を向けず、上方を向いたまま下方へ制動・後退
 - `boar-combat-left.png`：顔を見せず、背面三分の四で左へ身体を傾ける
 - `boar-combat-right.png`：左移動素材を反転し、輪郭とコマ順を維持
-- `boar-combat-focus.png`：背面で膝と肘を締めた、動きの小さい低速姿勢
+- `boar-combat-focus.png`：背面で膝と肘を締め、正面へ霊弾を集中させる射撃姿勢
 
 ### 戦闘用の共通プロンプト要点
 
