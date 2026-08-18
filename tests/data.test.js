@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  COMPANION_INSCRIPTIONS,
+  FANG_SIGILS,
+  MAX_COMPANION_INSCRIPTIONS,
+  MAX_FANG_SIGILS,
   OPTION_TYPES,
+  STANCE_TYPES,
   addItem,
   addOption,
   applyRunRewards,
@@ -14,10 +19,14 @@ import {
   generateLoot,
   generateOptionDrop,
   getDerivedStats,
+  getBuildConfig,
   getEquippedOption,
   normalizeSave,
   rollRarity,
   statDescriptions,
+  setStance,
+  toggleCompanionInscription,
+  toggleFangSigil,
   unequipOption,
   upgradeCost,
 } from "../src/data.js";
@@ -79,6 +88,44 @@ test("壊れたセーブ値を安全な範囲へ正規化する", () => {
   assert.deepEqual(save.optionInventory, []);
   assert.equal(save.equippedOption, null);
   assert.equal(save.settings.sensitivity, 1.2);
+  assert.equal(save.version, 3);
+  assert.deepEqual(save.build, { stance: "seigaku", fangSigils: [], companionInscriptions: [] });
+});
+
+test("旧セーブへ調律枠を追加し、同系統の付随刻印を重複させない", () => {
+  const migrated = normalizeSave({
+    version: 2,
+    build: {
+      stance: "suribi",
+      fangSigils: ["heavy", "swift", "scatter"],
+      companionInscriptions: ["convergence", "expansion", "blaze"],
+    },
+  });
+  assert.equal(migrated.version, 3);
+  assert.equal(migrated.build.stance, "suribi");
+  assert.deepEqual(migrated.build.fangSigils, ["heavy", "swift"]);
+  assert.deepEqual(migrated.build.companionInscriptions, ["convergence", "blaze"]);
+});
+
+test("構え4種・牙紋12種・付随刻印12種を所定の枠数で調律できる", () => {
+  assert.equal(Object.keys(STANCE_TYPES).length, 4);
+  assert.equal(Object.keys(FANG_SIGILS).length, 12);
+  assert.equal(Object.keys(COMPANION_INSCRIPTIONS).length, 12);
+  assert.equal(MAX_FANG_SIGILS, 2);
+  assert.equal(MAX_COMPANION_INSCRIPTIONS, 2);
+
+  const save = createDefaultSave();
+  assert.equal(setStance(save, "chototsu"), true);
+  assert.equal(toggleFangSigil(save, "heavy").ok, true);
+  assert.equal(toggleFangSigil(save, "afterfang").ok, true);
+  assert.deepEqual(toggleFangSigil(save, "swift"), { ok: false, reason: "full" });
+  assert.equal(toggleFangSigil(save, "heavy").equipped, false);
+
+  assert.equal(toggleCompanionInscription(save, "convergence").ok, true);
+  assert.equal(toggleCompanionInscription(save, "expansion").ok, true);
+  assert.deepEqual(getBuildConfig(save).companionInscriptions, ["expansion"]);
+  assert.equal(toggleCompanionInscription(save, "blaze").ok, true);
+  assert.deepEqual(toggleCompanionInscription(save, "chill"), { ok: false, reason: "full" });
 });
 
 test("運気と深度は上位レアリティの抽選余地を持つ", () => {
