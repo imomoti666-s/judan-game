@@ -1,9 +1,14 @@
 import {
+  COMPANION_INSCRIPTIONS,
+  FANG_SIGILS,
   MAX_INVENTORY,
+  MAX_COMPANION_INSCRIPTIONS,
+  MAX_FANG_SIGILS,
   MAX_OPTION_INVENTORY,
   OPTION_TYPES,
   RARITIES,
   SLOT_META,
+  STANCE_TYPES,
   addItem,
   addOption,
   applyRunRewards,
@@ -14,6 +19,7 @@ import {
   equipOption,
   generateLoot,
   generateOptionDrop,
+  getBuildConfig,
   getDerivedStats,
   getEquippedItems,
   getEquippedOption,
@@ -23,10 +29,13 @@ import {
   optionDescription,
   persistSave,
   statDescriptions,
+  setStance,
+  toggleCompanionInscription,
+  toggleFangSigil,
   unequipOption,
   upgradeCost,
   xpToNext,
-} from "./data.js?v=0.2.1";
+} from "./data.js?v=0.3.0";
 
 const WIDTH = 450;
 const HEIGHT = 800;
@@ -92,6 +101,7 @@ class JudanGame {
     this.canvas = document.querySelector("#game");
     this.ctx = this.canvas.getContext("2d", { alpha: false });
     this.save = loadSave();
+    this.build = getBuildConfig(this.save);
     this.state = "menu";
     this.paused = false;
     this.assetsReady = false;
@@ -121,7 +131,7 @@ class JudanGame {
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("sw.js?v=0.2.1").then((registration) => registration.update()).catch(() => {});
+        navigator.serviceWorker.register("sw.js?v=0.3.0").then((registration) => registration.update()).catch(() => {});
       });
     }
   }
@@ -138,7 +148,7 @@ class JudanGame {
       bossName: document.querySelector("#boss-name"),
       bossFill: document.querySelector("#boss-fill"),
       touchControls: document.querySelector("#touch-controls"),
-      focusButton: document.querySelector("#focus-button"),
+      shotModeButton: document.querySelector("#shot-mode-button"),
       bombButton: document.querySelector("#bomb-button"),
       bombCount: document.querySelector("#bomb-count"),
       pauseButton: document.querySelector("#pause-button"),
@@ -159,6 +169,13 @@ class JudanGame {
       optionCount: document.querySelector("#option-count"),
       equippedOption: document.querySelector("#equipped-option"),
       optionList: document.querySelector("#option-list"),
+      buildPanel: document.querySelector("#panel-build"),
+      buildSummary: document.querySelector("#build-summary"),
+      stanceList: document.querySelector("#stance-list"),
+      fangSigilCount: document.querySelector("#fang-sigil-count"),
+      fangSigilList: document.querySelector("#fang-sigil-list"),
+      companionInscriptionCount: document.querySelector("#companion-inscription-count"),
+      companionInscriptionList: document.querySelector("#companion-inscription-list"),
       volume: document.querySelector("#volume-setting"),
       sensitivity: document.querySelector("#sensitivity-setting"),
       shake: document.querySelector("#shake-setting"),
@@ -270,6 +287,39 @@ class JudanGame {
       }
     });
 
+    this.dom.buildPanel.addEventListener("click", (event) => {
+      const stance = event.target.closest("[data-stance]");
+      const fang = event.target.closest("[data-fang-sigil]");
+      const inscription = event.target.closest("[data-companion-inscription]");
+      if (stance && setStance(this.save, stance.dataset.stance)) {
+        persistSave(this.save);
+        this.showToast(`${STANCE_TYPES[stance.dataset.stance].label}へ切り替えた`);
+        this.renderMenu();
+        return;
+      }
+      if (fang) {
+        const result = toggleFangSigil(this.save, fang.dataset.fangSigil);
+        if (!result.ok) {
+          this.showToast(result.reason === "full" ? "牙紋は二つまでだ" : "その牙紋は扱えぬ");
+          return;
+        }
+        persistSave(this.save);
+        this.showToast(`${FANG_SIGILS[fang.dataset.fangSigil].label}を${result.equipped ? "刻んだ" : "外した"}`);
+        this.renderMenu();
+        return;
+      }
+      if (inscription) {
+        const result = toggleCompanionInscription(this.save, inscription.dataset.companionInscription);
+        if (!result.ok) {
+          this.showToast(result.reason === "full" ? "付随刻印は二つまでだ" : "その刻印は扱えぬ");
+          return;
+        }
+        persistSave(this.save);
+        this.showToast(`${COMPANION_INSCRIPTIONS[inscription.dataset.companionInscription].label}を${result.equipped ? "刻んだ" : "外した"}`);
+        this.renderMenu();
+      }
+    });
+
     this.dom.volume.addEventListener("input", () => {
       this.save.settings.volume = Number(this.dom.volume.value);
       persistSave(this.save);
@@ -302,8 +352,11 @@ class JudanGame {
       const scaleX = WIDTH / rect.width;
       const scaleY = HEIGHT / rect.height;
       const sensitivity = Number(this.save.settings.sensitivity || 1);
-      const dx = (event.clientX - this.pointer.x) * scaleX * sensitivity;
-      const dy = (event.clientY - this.pointer.y) * scaleY * sensitivity;
+      let dx = (event.clientX - this.pointer.x) * scaleX * sensitivity;
+      let dy = (event.clientY - this.pointer.y) * scaleY * sensitivity;
+      const movementMultiplier = this.getMovementMultiplier(dx, dy);
+      dx *= movementMultiplier;
+      dy *= movementMultiplier;
       this.pointer.x = event.clientX;
       this.pointer.y = event.clientY;
       this.player.x = clamp(this.player.x + dx, 28, WIDTH - 28);
@@ -325,24 +378,13 @@ class JudanGame {
         event.preventDefault();
       }
       this.keys.add(key);
+      if (key === "shift" && !event.repeat && this.state === "playing") this.toggleShotMode(true);
       if (key === " " && this.state === "playing") this.useBomb();
       if (key === "escape" && this.state === "playing") this.togglePause();
     });
     window.addEventListener("keyup", (event) => this.keys.delete(event.key.toLowerCase()));
 
-    const setFocus = (active) => {
-      if (!this.player || this.state !== "playing" || this.paused) return;
-      this.player.focus = active;
-      this.dom.focusButton.classList.toggle("is-held", active);
-    };
-    this.dom.focusButton.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setFocus(true);
-    });
-    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => {
-      this.dom.focusButton.addEventListener(type, () => setFocus(false));
-    });
+    this.dom.shotModeButton.addEventListener("click", () => this.toggleShotMode(true));
     this.dom.bombButton.addEventListener("click", () => this.useBomb());
     this.dom.pauseButton.addEventListener("click", () => this.togglePause());
     document.addEventListener("visibilitychange", () => {
@@ -350,10 +392,27 @@ class JudanGame {
     });
   }
 
+  toggleShotMode(announce = false) {
+    if (!this.player || this.state !== "playing" || this.paused) return;
+    this.setShotMode(!this.player.focus, announce);
+  }
+
+  setShotMode(focused, announce = false) {
+    if (!this.player) return;
+    this.player.focus = Boolean(focused);
+    this.dom.shotModeButton.classList.toggle("is-focused", this.player.focus);
+    this.dom.shotModeButton.setAttribute("aria-pressed", String(this.player.focus));
+    this.dom.shotModeButton.innerHTML = this.player.focus
+      ? "<span>集中</span><small>FOCUS</small>"
+      : "<span>通常</span><small>NORMAL</small>";
+    if (announce) this.showToast(this.player.focus ? "集中射撃――一点を穿て" : "通常射撃――広く薙げ");
+  }
+
   renderMenu() {
     const stats = getDerivedStats(this.save);
     const equipped = getEquippedItems(this.save);
     const equippedOption = getEquippedOption(this.save);
+    const build = getBuildConfig(this.save);
     this.dom.levelLabel.textContent = `鍛錬 ${this.save.level} ・ ${this.save.xp}/${xpToNext(this.save.level)}`;
     this.dom.coinLabel.textContent = `欠片 ${this.save.coins}`;
     this.dom.trainingCoins.textContent = `欠片 ${this.save.coins}`;
@@ -389,6 +448,26 @@ class JudanGame {
       </article>`;
     }).join("");
 
+    const stanceMeta = STANCE_TYPES[build.stance];
+    const fangNames = build.fangSigils.map((id) => FANG_SIGILS[id].label).join("・") || "未刻印";
+    const inscriptionNames = build.companionInscriptions.map((id) => COMPANION_INSCRIPTIONS[id].label).join("・") || "未刻印";
+    this.dom.buildSummary.innerHTML = [
+      ["構え", stanceMeta.label],
+      ["牙紋", fangNames],
+      ["付随刻印", inscriptionNames],
+    ].map(([label, value]) => `<div class="build-summary-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    this.dom.fangSigilCount.textContent = `${build.fangSigils.length} / ${MAX_FANG_SIGILS}`;
+    this.dom.companionInscriptionCount.textContent = `${build.companionInscriptions.length} / ${MAX_COMPANION_INSCRIPTIONS}`;
+    this.dom.stanceList.innerHTML = Object.entries(STANCE_TYPES)
+      .map(([id, meta]) => this.buildCardHtml(meta, "stance", id, build.stance === id, meta.color))
+      .join("");
+    this.dom.fangSigilList.innerHTML = Object.entries(FANG_SIGILS)
+      .map(([id, meta]) => this.buildCardHtml(meta, "fang-sigil", id, build.fangSigils.includes(id), "#ffc266"))
+      .join("");
+    this.dom.companionInscriptionList.innerHTML = Object.entries(COMPANION_INSCRIPTIONS)
+      .map(([id, meta]) => this.buildCardHtml(meta, "companion-inscription", id, build.companionInscriptions.includes(id), "#b993ff"))
+      .join("");
+
     this.dom.equippedOption.innerHTML = equippedOption
       ? this.optionCardHtml(equippedOption, true)
       : `<article class="option-card is-empty"><div class="option-icon">基</div><div><h4>随伴器なし</h4><p>基本の双牙弾だけを使用する。ステージ踏破で随伴器が候補へ現れる。</p></div></article>`;
@@ -411,6 +490,13 @@ class JudanGame {
       return RARITIES[b.rarity].value - RARITIES[a.rarity].value;
     });
     this.dom.inventoryList.innerHTML = sorted.map((item) => this.gearCardHtml(item, equipped[item.slot]?.id === item.id)).join("");
+  }
+
+  buildCardHtml(meta, attribute, id, isEquipped, color) {
+    return `<button class="build-card ${isEquipped ? "is-equipped" : ""}" type="button" data-${attribute}="${id}" aria-pressed="${isEquipped}" style="--module-color:${color}">
+      <span class="build-card-icon">${meta.icon}</span>
+      <span><h4>${escapeHtml(meta.label)}</h4><p>${escapeHtml(meta.description)}</p></span>
+    </button>`;
   }
 
   gearCardHtml(item, isEquipped = false, choice = false) {
@@ -459,6 +545,7 @@ class JudanGame {
     this.stage = stage;
     this.stats = getDerivedStats(this.save);
     this.option = getEquippedOption(this.save);
+    this.build = getBuildConfig(this.save);
     this.state = "playing";
     this.paused = false;
     this.menuToGame(true);
@@ -474,12 +561,16 @@ class JudanGame {
       invincible: 1.2,
       fireTimer: 0,
       optionFireTimer: 0,
+      mainVolleyCount: 0,
+      misfireCharged: false,
+      stanceGuardCooldown: 0,
       spirit: 0,
       overdrive: 0,
       motionX: 0,
       motionY: 0,
       motionTimer: 0,
     };
+    this.setShotMode(false);
     this.enemies = [];
     this.enemyBullets = [];
     this.playerShots = [];
@@ -501,7 +592,7 @@ class JudanGame {
     this.dom.bossWrap.classList.add("is-hidden");
     this.updateHud();
     const optionLabel = this.option ? `　随伴・${OPTION_TYPES[this.option.optionType].label}` : "";
-    this.showFloatingBanner(`危険度 ${stage.id}　${stage.name}${optionLabel}`);
+    this.showFloatingBanner(`危険度 ${stage.id}　${stage.name}　${STANCE_TYPES[this.build.stance].label}${optionLabel}`);
     this.tone(260, 0.12, "triangle", 0.12);
     this.tone(390, 0.16, "triangle", 0.09, 0.08);
   }
@@ -558,13 +649,13 @@ class JudanGame {
     if (this.keys.has("arrowright") || this.keys.has("d")) dx += 1;
     if (this.keys.has("arrowup") || this.keys.has("w")) dy -= 1;
     if (this.keys.has("arrowdown") || this.keys.has("s")) dy += 1;
-    const keyboardFocus = this.keys.has("shift");
-    const focused = this.player.focus || keyboardFocus;
+    const focused = this.player.focus;
+    this.player.stanceGuardCooldown = Math.max(0, this.player.stanceGuardCooldown - dt);
     if (dx || dy) {
       const length = Math.hypot(dx, dy) || 1;
-      const speed = this.stats.speed * (focused ? 0.43 : 1);
       dx /= length;
       dy /= length;
+      const speed = this.stats.speed * this.getMovementMultiplier(dx, dy);
       this.player.x = clamp(this.player.x + dx * speed * dt, 28, WIDTH - 28);
       this.player.y = clamp(this.player.y + dy * speed * dt, 112, PLAY_BOTTOM - 16);
       this.player.motionX = dx * 12;
@@ -574,7 +665,7 @@ class JudanGame {
 
     this.player.fireTimer -= dt;
     const overdriveRate = this.player.overdrive > 0 ? 1.72 : 1;
-    const interval = this.stats.fireInterval / overdriveRate;
+    const interval = this.getMainFireInterval(focused) / overdriveRate;
     while (this.player.fireTimer <= 0) {
       this.fireMainShots(focused);
       this.player.fireTimer += interval;
@@ -582,103 +673,311 @@ class JudanGame {
 
     if (!this.option) return;
     this.player.optionFireTimer -= dt;
-    const optionInterval = this.getOptionFireInterval() / overdriveRate;
+    const optionInterval = this.getOptionFireInterval(this.option.optionType, focused) / overdriveRate;
     while (this.player.optionFireTimer <= 0) {
       this.fireOptionShots(focused);
       this.player.optionFireTimer += optionInterval;
     }
   }
 
-  getOptionFireInterval(optionType = this.option?.optionType) {
-    return OPTION_FIRE_INTERVAL[optionType] || 0.8;
+  hasFangSigil(id) {
+    return Boolean(this.build?.fangSigils?.includes(id));
+  }
+
+  hasCompanionInscription(id) {
+    return Boolean(this.build?.companionInscriptions?.includes(id));
+  }
+
+  isPlayerMoving() {
+    return Boolean(this.player?.motionTimer > 0.025 && (Math.abs(this.player.motionX) + Math.abs(this.player.motionY) > 0.05));
+  }
+
+  isAdvancing() {
+    return this.isPlayerMoving() && this.player.motionY < -0.05;
+  }
+
+  isRetreating() {
+    return this.isPlayerMoving() && this.player.motionY > 0.05;
+  }
+
+  getMovementMultiplier(_dx = this.player?.motionX || 0, dy = this.player?.motionY || 0) {
+    let multiplier = 1;
+    if (this.build?.stance === "seigaku") multiplier *= 0.9;
+    if (this.build?.stance === "chototsu") {
+      if (dy < -0.05) multiplier *= 1.12;
+      else if (dy > 0.05) multiplier *= 0.9;
+    }
+    return multiplier;
+  }
+
+  getStanceDamageMultiplier(focused, source = "main") {
+    let multiplier = 1;
+    if (this.build?.stance === "seigaku" && !this.isPlayerMoving()) multiplier *= source === "main" ? 1.22 : 1.1;
+    if (this.build?.stance === "araga" && focused) multiplier *= 0.9;
+    if (this.build?.stance === "suribi" && !focused) multiplier *= 0.9;
+    if (this.build?.stance === "chototsu") {
+      if (this.isAdvancing()) multiplier *= 1.18;
+      else if (this.isRetreating()) multiplier *= 0.88;
+    }
+    return multiplier;
+  }
+
+  getPlayerHitRadius() {
+    let radius = PLAYER_HIT_RADIUS;
+    if (this.build?.stance === "araga") radius += 2;
+    if (this.build?.stance === "chototsu" && this.isAdvancing()) radius -= 1;
+    return Math.max(3, radius);
+  }
+
+  getGrazeRadius() {
+    return this.stats.grazeRadius + (this.player.focus ? 5 : 0) + (this.build?.stance === "suribi" && this.player.focus ? 12 : 0);
+  }
+
+  getMainFireInterval(focused = this.player?.focus) {
+    let interval = this.stats.fireInterval * (focused ? 1.12 : 1);
+    if (this.hasFangSigil("swift")) interval *= 0.72;
+    if (this.build?.stance === "araga" && !focused) interval *= 0.78;
+    if (this.build?.stance === "chototsu" && this.isAdvancing()) interval *= 0.86;
+    return Math.max(0.045, interval);
+  }
+
+  getOptionFireInterval(optionType = this.option?.optionType, focused = this.player?.focus) {
+    let interval = OPTION_FIRE_INTERVAL[optionType] || 0.8;
+    if (this.hasCompanionInscription("vanguard")) interval *= 0.86;
+    if (this.hasCompanionInscription("focusSync")) interval *= focused ? 0.7 : 1.18;
+    if (this.hasCompanionInscription("normalSync")) interval *= focused ? 1.2 : 0.72;
+    if (this.build?.stance === "chototsu" && this.isAdvancing()) interval *= 0.9;
+    return Math.max(0.08, interval);
   }
 
   fireMainShots(focused) {
-    const baseCount = this.stats.projectiles + (this.player.overdrive > 0 ? 1 : 0);
-    const baseDamage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
-    const spread = focused ? this.stats.spread * 0.36 : this.stats.spread;
-    for (let i = 0; i < baseCount; i += 1) {
-      this.addPlayerShot({
-        x: this.player.x + (i - (baseCount - 1) / 2) * 7,
-        y: this.player.y - 44,
-        angle: (i - (baseCount - 1) / 2) * spread,
-        speed: 670,
-        damage: baseDamage,
-        radius: 8,
-        hitsLeft: this.stats.pierce,
-        type: "base",
-      });
+    this.player.mainVolleyCount += 1;
+    let chargedMultiplier = 1;
+    if (this.hasFangSigil("misfire")) {
+      if (this.player.misfireCharged) {
+        chargedMultiplier = 2.2;
+        this.player.misfireCharged = false;
+      } else if (Math.random() < 0.22) {
+        this.player.misfireCharged = true;
+        this.spawnParticles(this.player.x, this.player.y - 38, "#ff8068", 4, 24);
+        this.tone(115, 0.035, "square", 0.022);
+        return;
+      }
     }
+
+    let count = this.stats.projectiles + (this.player.overdrive > 0 ? 1 : 0);
+    let damage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
+    let spread = focused ? this.stats.spread * 0.28 : this.stats.spread;
+    let speed = 670;
+    let radius = 8;
+    let hitsLeft = this.stats.pierce + (focused ? 1 : 0);
+    let spiritGain = 0;
+
+    damage *= this.getStanceDamageMultiplier(focused, "main") * chargedMultiplier;
+    if (this.hasFangSigil("heavy")) {
+      damage *= 1.35;
+      speed *= 0.72;
+      radius += 2;
+    }
+    if (this.hasFangSigil("swift")) damage *= 0.78;
+    if (this.hasFangSigil("bloodfang")) {
+      const current = this.player.hp + this.player.shield;
+      const maximum = this.player.maxHp + this.player.maxShield;
+      damage *= 1 + (1 - current / Math.max(1, maximum)) * 0.55;
+    }
+    if (this.hasFangSigil("convergence") && focused) {
+      damage *= 1.12;
+      spread *= 0.42;
+    }
+    if (this.hasFangSigil("scatter") && !focused) {
+      count += 2;
+      damage *= 0.76;
+    }
+    if (this.hasFangSigil("severance")) {
+      damage *= 0.88;
+      hitsLeft += 2;
+    }
+    if (this.hasFangSigil("recoil")) {
+      damage *= 1.12;
+      speed *= 1.25;
+    }
+    if (this.hasFangSigil("furnace")) {
+      damage *= 0.92;
+      spiritGain = 0.55;
+    }
+
+    const addVolley = (damageScale = 1, yOffset = 0, type = "base") => {
+      for (let i = 0; i < count; i += 1) {
+        const offset = i - (count - 1) / 2;
+        let angle = offset * spread;
+        if (this.hasFangSigil("crossing")) angle *= -1;
+        this.addPlayerShot({
+          x: this.player.x + offset * 7,
+          y: this.player.y - 44 + yOffset,
+          angle,
+          speed,
+          damage: damage * damageScale,
+          radius: type === "echo" ? Math.max(4, radius - 2) : radius,
+          hitsLeft: type === "echo" ? Math.max(0, hitsLeft - 1) : hitsLeft,
+          type,
+          source: "main",
+          spiritGain: type === "echo" ? spiritGain * 0.35 : spiritGain,
+        });
+      }
+    };
+
+    addVolley();
+    if (this.hasFangSigil("afterfang")) addVolley(0.32, 26, "echo");
+    if (this.hasFangSigil("doublebeat") && this.player.mainVolleyCount % 3 === 0) addVolley(0.55, 17, "echo");
+    if (this.hasFangSigil("recoil")) this.player.y = clamp(this.player.y + 2.2, 112, PLAY_BOTTOM - 16);
     this.shotSoundTick += 1;
     if (this.shotSoundTick % 5 === 0) this.tone(420, 0.025, "triangle", 0.018);
   }
 
+  getOptionNodePositions(focused = this.player?.focus) {
+    if (!this.option) return [];
+    const type = this.option.optionType;
+    const scale = this.hasCompanionInscription("convergence")
+      ? 0.68
+      : this.hasCompanionInscription("expansion") ? 1.28 : 1;
+    const yShift = this.hasCompanionInscription("vanguard") ? -18 : 0;
+    if (this.hasCompanionInscription("orbit")) {
+      const radius = (focused ? 38 : 52) * scale;
+      const angle = this.time * (focused ? 1.9 : 2.8);
+      const count = type === "lance" ? 1 : 2;
+      return Array.from({ length: count }, (_, index) => {
+        const nodeAngle = angle + (TAU * index) / count;
+        return [Math.cos(nodeAngle) * radius, Math.sin(nodeAngle) * radius * 0.42 + yShift];
+      });
+    }
+    if (type === "homing") {
+      const radius = (focused ? 36 : 51) * scale;
+      const angle = this.time * (focused ? 1.6 : 2.7);
+      return [
+        [Math.cos(angle) * radius, Math.sin(angle) * 18 - 6 + yShift],
+        [Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * 18 - 6 + yShift],
+      ];
+    }
+    if (type === "lance") return [[0, -58 + yShift]];
+    const distance = (focused ? 35 : 51) * scale;
+    return [[-distance, -4 + yShift], [distance, -4 + yShift]];
+  }
+
+  getOptionDamageMultiplier(focused = this.player?.focus) {
+    let multiplier = this.getStanceDamageMultiplier(focused, "option");
+    if (this.hasCompanionInscription("convergence")) multiplier *= 1.1;
+    if (this.hasCompanionInscription("expansion")) multiplier *= 0.88;
+    if (this.hasCompanionInscription("vanguard")) multiplier *= 0.92;
+    if (this.hasCompanionInscription("chill")) multiplier *= 0.92;
+    if (this.hasCompanionInscription("burst")) multiplier *= 0.9;
+    if (this.hasCompanionInscription("ricochet")) multiplier *= 0.88;
+    if (this.hasCompanionInscription("eraser")) multiplier *= 0.82;
+    if (this.hasCompanionInscription("furnace")) multiplier *= 0.9;
+    return multiplier;
+  }
+
+  getOptionShotTraits(damage) {
+    const traits = { source: "option" };
+    if (this.hasCompanionInscription("blaze")) {
+      traits.burnDamage = damage * 0.24;
+      traits.burnDuration = 1.8;
+    }
+    if (this.hasCompanionInscription("chill")) {
+      traits.slowFactor = 0.68;
+      traits.slowDuration = 1.45;
+    }
+    if (this.hasCompanionInscription("burst")) {
+      traits.splashDamage = damage * 0.36;
+      traits.splashRadius = 54;
+    }
+    if (this.hasCompanionInscription("eraser")) traits.eraseBullets = true;
+    if (this.hasCompanionInscription("furnace")) traits.spiritGain = 0.8;
+    return traits;
+  }
+
   fireOptionShots(focused) {
     if (!this.option) return;
-    const baseDamage = this.stats.damage * (focused ? this.stats.focusDamage : 1);
+    const baseDamage = this.stats.damage
+      * (focused ? this.stats.focusDamage : 1)
+      * this.getOptionDamageMultiplier(focused);
     const optionPower = Number(this.option.power || 1);
     const type = this.option.optionType;
+    const nodes = this.getOptionNodePositions(focused);
+    const spreadMultiplier = this.hasCompanionInscription("convergence")
+      ? 0.55
+      : this.hasCompanionInscription("expansion") ? 1.55 : 1;
+    const bonusPierce = this.hasCompanionInscription("ricochet") ? 2 : 0;
 
     if (type === "fan") {
-      const count = 5;
-      const spread = focused ? 0.045 : 0.13;
+      const count = 5 + (this.hasCompanionInscription("expansion") ? 2 : 0);
+      const spread = (focused ? 0.045 : 0.13) * spreadMultiplier;
       for (let i = 0; i < count; i += 1) {
+        const damage = baseDamage * optionPower * 0.26;
+        const node = nodes[i % Math.max(1, nodes.length)] || [0, -32];
         this.addPlayerShot({
-          x: this.player.x + (i - 2) * 4,
-          y: this.player.y - 32,
+          x: this.player.x + node[0] + (i - (count - 1) / 2) * 2,
+          y: this.player.y + node[1],
           angle: (i - (count - 1) / 2) * spread,
           speed: focused ? 690 : 610,
-          damage: baseDamage * optionPower * 0.26,
+          damage,
           radius: 6,
-          hitsLeft: Math.max(0, this.stats.pierce - 1),
+          hitsLeft: Math.max(0, this.stats.pierce - 1) + bonusPierce,
           type: "fan",
+          ...this.getOptionShotTraits(damage),
         });
       }
     } else if (type === "lance") {
+      const damage = baseDamage * optionPower * 3.25;
+      const node = nodes[0] || [0, -58];
       this.addPlayerShot({
-        x: this.player.x,
-        y: this.player.y - 58,
+        x: this.player.x + node[0],
+        y: this.player.y + node[1],
         angle: 0,
         speed: 730,
-        damage: baseDamage * optionPower * 3.25,
+        damage,
         radius: 15,
-        hitsLeft: this.stats.pierce + 7,
+        hitsLeft: this.stats.pierce + 7 + bonusPierce,
         type: "lance",
+        ...this.getOptionShotTraits(damage),
       });
     } else if (type === "homing") {
       const count = 2;
-      const spread = focused ? 0.055 : 0.12;
+      const spread = (focused ? 0.055 : 0.12) * spreadMultiplier;
       for (let i = 0; i < count; i += 1) {
+        const damage = baseDamage * optionPower * 0.42;
+        const node = nodes[i] || [i ? 32 : -32, -24];
         this.addPlayerShot({
-          x: this.player.x + (i ? 32 : -32),
-          y: this.player.y - 24,
+          x: this.player.x + node[0],
+          y: this.player.y + node[1],
           angle: (i - (count - 1) / 2) * spread,
           speed: 515,
-          damage: baseDamage * optionPower * 0.42,
+          damage,
           radius: 7,
-          hitsLeft: Math.max(0, this.stats.pierce - 1),
+          hitsLeft: Math.max(0, this.stats.pierce - 1) + bonusPierce,
           type: "homing",
-          turnRate: focused ? 6.4 : 5,
+          turnRate: (focused ? 6.4 : 5) + (this.hasCompanionInscription("orbit") ? 1.8 : 0),
+          ...this.getOptionShotTraits(damage),
         });
       }
     } else if (type === "twin") {
-      const lane = focused ? 34 : 50;
-      for (const offset of [-lane, lane]) {
+      for (const [index, node] of nodes.entries()) {
+        const damage = baseDamage * optionPower * 0.34;
         this.addPlayerShot({
-          x: this.player.x + offset,
-          y: this.player.y - 20,
-          angle: focused ? -offset * 0.0006 : 0,
+          x: this.player.x + node[0],
+          y: this.player.y + node[1],
+          angle: focused ? -node[0] * 0.0006 : (index ? 0.012 : -0.012) * (spreadMultiplier - 1),
           speed: 650,
-          damage: baseDamage * optionPower * 0.34,
+          damage,
           radius: 7,
-          hitsLeft: Math.max(0, this.stats.pierce - 1),
+          hitsLeft: Math.max(0, this.stats.pierce - 1) + bonusPierce,
           type: "twin",
+          ...this.getOptionShotTraits(damage),
         });
       }
     }
   }
 
-  addPlayerShot({ x, y, angle, speed, damage, radius, hitsLeft, type, turnRate = 0 }) {
+  addPlayerShot({ x, y, angle, speed, damage, radius, hitsLeft, type, turnRate = 0, ...traits }) {
     this.playerShots.push({
       x,
       y,
@@ -691,6 +990,7 @@ class JudanGame {
       turnRate,
       age: 0,
       hitIds: new Set(),
+      ...traits,
     });
   }
 
@@ -794,38 +1094,48 @@ class JudanGame {
 
   updateEnemies(dt) {
     for (const enemy of this.enemies) {
-      enemy.age += dt;
-      enemy.shootTimer -= dt;
+      enemy.burnTimer = Math.max(0, (enemy.burnTimer || 0) - dt);
+      if (enemy.burnTimer > 0 && enemy.burnDamage > 0) {
+        enemy.hp -= enemy.burnDamage * dt;
+        if (enemy.hp <= 0) {
+          this.killEnemy(enemy);
+          continue;
+        }
+      }
+      enemy.slowTimer = Math.max(0, (enemy.slowTimer || 0) - dt);
+      const enemyDt = dt * (enemy.slowTimer > 0 ? enemy.slowFactor || 0.68 : 1);
+      enemy.age += enemyDt;
+      enemy.shootTimer -= enemyDt;
       if (enemy.type === "boss") {
-        this.updateBoss(enemy, dt);
+        this.updateBoss(enemy, enemyDt);
         continue;
       }
 
       if (enemy.type === "orb") {
-        enemy.x += enemy.vx * dt;
-        enemy.y += enemy.vy * dt;
-        enemy.x += Math.sin(enemy.age * 3 + enemy.baseX) * 18 * dt;
+        enemy.x += enemy.vx * enemyDt;
+        enemy.y += enemy.vy * enemyDt;
+        enemy.x += Math.sin(enemy.age * 3 + enemy.baseX) * 18 * enemyDt;
         if (enemy.shootTimer <= 0 && enemy.y > 45) {
           this.shootAimed(enemy, 1 + (this.stage.id >= 3 ? 1 : 0), 0.12, 118 + this.stage.id * 13, enemy.color);
           enemy.shootTimer = 1.7 - this.stage.id * 0.12;
         }
       } else if (enemy.type === "dart") {
-        enemy.y += enemy.vy * dt;
-        enemy.x += Math.sin(enemy.age * 4.2 + enemy.baseX) * 105 * dt;
+        enemy.y += enemy.vy * enemyDt;
+        enemy.x += Math.sin(enemy.age * 4.2 + enemy.baseX) * 105 * enemyDt;
         if (enemy.shootTimer <= 0 && enemy.y > 60) {
           this.shootAimed(enemy, 3 + this.stage.id, 0.15, 150 + this.stage.id * 12, enemy.color);
           enemy.shootTimer = 2.15;
         }
       } else if (enemy.type === "turret") {
-        enemy.y = Math.min(165, enemy.y + enemy.vy * dt);
-        enemy.x += Math.sin(enemy.age * 1.7 + enemy.baseX) * 22 * dt;
+        enemy.y = Math.min(165, enemy.y + enemy.vy * enemyDt);
+        enemy.x += Math.sin(enemy.age * 1.7 + enemy.baseX) * 22 * enemyDt;
         if (enemy.shootTimer <= 0 && enemy.y > 80) {
           this.shootRadial(enemy, 7 + this.stage.id * 2, 92 + this.stage.id * 10, enemy.angle, enemy.color);
           enemy.angle += 0.23;
           enemy.shootTimer = 1.45;
         }
       } else if (enemy.type === "spinner") {
-        enemy.y = Math.min(125, enemy.y + enemy.vy * dt);
+        enemy.y = Math.min(125, enemy.y + enemy.vy * enemyDt);
         enemy.x = WIDTH / 2 + Math.sin(enemy.age * 1.25) * 105;
         if (enemy.shootTimer <= 0 && enemy.y > 70) {
           for (const offset of [-0.5, 0.5]) {
@@ -977,6 +1287,17 @@ class JudanGame {
 
   resolveCollisions() {
     for (const shot of this.playerShots) {
+      if (shot.eraseBullets && (shot.erasedCount || 0) < 2) {
+        for (const bullet of this.enemyBullets) {
+          if (bullet.remove) continue;
+          const eraseRadius = shot.radius + bullet.radius + 13;
+          if (distanceSq(shot.x, shot.y, bullet.x, bullet.y) > eraseRadius * eraseRadius) continue;
+          bullet.remove = true;
+          shot.erasedCount = (shot.erasedCount || 0) + 1;
+          this.spawnParticles(bullet.x, bullet.y, "#d8c2ff", 3, 34);
+          if (shot.erasedCount >= 2) break;
+        }
+      }
       for (const enemy of this.enemies) {
         if (shot.hitsLeft < -1) break;
         if (enemy.dead || shot.hitIds.has(enemy.id)) continue;
@@ -984,6 +1305,25 @@ class JudanGame {
         if (distanceSq(shot.x, shot.y, enemy.x, enemy.y) > radius * radius) continue;
         shot.hitIds.add(enemy.id);
         enemy.hp -= shot.damage;
+        if (shot.burnDamage) {
+          enemy.burnDamage = Math.max(enemy.burnDamage || 0, shot.burnDamage);
+          enemy.burnTimer = Math.max(enemy.burnTimer || 0, shot.burnDuration || 1.8);
+        }
+        if (shot.slowFactor) {
+          enemy.slowFactor = Math.min(enemy.slowFactor || 1, shot.slowFactor);
+          enemy.slowTimer = Math.max(enemy.slowTimer || 0, shot.slowDuration || 1.45);
+        }
+        if (shot.splashDamage && shot.splashRadius) {
+          for (const nearby of this.enemies) {
+            if (nearby === enemy || nearby.dead) continue;
+            const splashRadius = shot.splashRadius + nearby.radius;
+            if (distanceSq(enemy.x, enemy.y, nearby.x, nearby.y) > splashRadius * splashRadius) continue;
+            nearby.hp -= shot.splashDamage;
+            this.spawnParticles(nearby.x, nearby.y, "#ffb86c", 2, 38);
+            if (nearby.hp <= 0) this.killEnemy(nearby);
+          }
+        }
+        if (shot.spiritGain) this.gainSpirit(shot.spiritGain);
         this.spawnParticles(shot.x, shot.y, enemy.color, 2, 45);
         if (shot.hitsLeft <= 0) shot.hitsLeft = -2;
         else shot.hitsLeft -= 1;
@@ -993,26 +1333,21 @@ class JudanGame {
 
     const hitX = this.player.x;
     const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
-    const grazeRadius = this.stats.grazeRadius + (this.player.focus ? 5 : 0);
+    const grazeRadius = this.getGrazeRadius();
+    const playerHitRadius = this.getPlayerHitRadius();
     for (const bullet of this.enemyBullets) {
+      if (bullet.remove) continue;
       const distSq = distanceSq(hitX, hitY, bullet.x, bullet.y);
-      const hitRadius = bullet.radius + PLAYER_HIT_RADIUS;
+      const hitRadius = bullet.radius + playerHitRadius;
       if (distSq <= hitRadius * hitRadius && this.player.invincible <= 0) {
         bullet.remove = true;
         this.damagePlayer();
       } else if (!bullet.grazed && distSq <= (bullet.radius + grazeRadius) ** 2) {
         bullet.grazed = true;
-        this.player.spirit += this.player.focus ? 4.2 : 2.2;
+        this.gainSpirit(this.player.focus ? 4.2 : 2.2);
         this.runScore += 35 * this.stage.id;
         this.runXp += 1;
         this.spawnParticles(hitX, hitY, "#74f0db", 2, 22);
-        if (this.player.spirit >= 100) {
-          this.player.spirit = 0;
-          this.player.overdrive = 6.5;
-          this.showToast("炉心開放――牙弾奔流");
-          this.tone(520, 0.14, "sine", 0.1);
-          this.tone(920, 0.22, "triangle", 0.08, 0.05);
-        }
       }
     }
     this.enemyBullets = this.enemyBullets.filter((bullet) => !bullet.remove);
@@ -1038,7 +1373,28 @@ class JudanGame {
     }
   }
 
+  gainSpirit(amount) {
+    if (!this.player || !Number.isFinite(amount) || amount <= 0) return;
+    const stanceMultiplier = this.build?.stance === "suribi" ? 1.65 : 1;
+    this.player.spirit += amount * stanceMultiplier;
+    if (this.player.spirit < 100) return;
+    this.player.spirit %= 100;
+    this.player.overdrive = Math.max(this.player.overdrive, 6.5);
+    this.showToast("炉心開放――牙弾奔流");
+    this.tone(520, 0.14, "sine", 0.1);
+    this.tone(920, 0.22, "triangle", 0.08, 0.05);
+  }
+
   damagePlayer() {
+    if (this.build?.stance === "seigaku" && !this.isPlayerMoving() && this.player.stanceGuardCooldown <= 0) {
+      this.player.stanceGuardCooldown = 7;
+      this.player.invincible = 0.72;
+      this.shake = 3;
+      this.spawnParticles(this.player.x, this.player.y + PLAYER_HIT_Y_OFFSET, "#8ff1d7", 12, 95);
+      this.showToast("静岳――被弾を受け流した");
+      this.tone(310, 0.11, "triangle", 0.08);
+      return;
+    }
     if (this.player.shield > 0) this.player.shield -= 1;
     else this.player.hp -= 1;
     this.player.invincible = 1.15;
@@ -1152,7 +1508,7 @@ class JudanGame {
 
   drawPlayer(ctx) {
     if (!this.player || !this.assetsReady) return;
-    const focused = this.player.focus || this.keys.has("shift");
+    const focused = this.player.focus;
     let state = "idle";
     if (focused) state = "focus";
     else if (this.player.motionTimer > 0) {
@@ -1172,13 +1528,14 @@ class JudanGame {
     ctx.restore();
 
     const hitY = this.player.y + PLAYER_HIT_Y_OFFSET;
+    const hitRadius = this.getPlayerHitRadius();
     const pulse = (Math.sin(this.time * 9) + 1) / 2;
     ctx.save();
     ctx.shadowColor = "#ff334d";
     ctx.shadowBlur = 16;
     ctx.fillStyle = "#ff334d";
     ctx.beginPath();
-    ctx.arc(this.player.x, hitY, PLAYER_HIT_RADIUS + pulse * 0.7, 0, TAU);
+    ctx.arc(this.player.x, hitY, hitRadius + pulse * 0.7, 0, TAU);
     ctx.fill();
     ctx.shadowBlur = 5;
     ctx.strokeStyle = "#fff5f2";
@@ -1195,7 +1552,7 @@ class JudanGame {
       ctx.strokeStyle = "#ff6673";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(this.player.x, hitY, this.stats.grazeRadius, 0, TAU);
+      ctx.arc(this.player.x, hitY, this.getGrazeRadius(), 0, TAU);
       ctx.stroke();
     }
     ctx.restore();
@@ -1219,21 +1576,7 @@ class JudanGame {
     if (!this.player || !this.option) return;
     const meta = OPTION_TYPES[this.option.optionType];
     if (!meta) return;
-    const focused = this.player.focus || this.keys.has("shift");
-    let positions;
-    if (this.option.optionType === "homing") {
-      const radius = focused ? 36 : 51;
-      const angle = this.time * (focused ? 1.6 : 2.7);
-      positions = [
-        [Math.cos(angle) * radius, Math.sin(angle) * 18 - 6],
-        [Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * 18 - 6],
-      ];
-    } else if (this.option.optionType === "lance") {
-      positions = [[0, -58]];
-    } else {
-      const distance = focused ? 35 : 51;
-      positions = [[-distance, -4], [distance, -4]];
-    }
+    const positions = this.getOptionNodePositions(this.player.focus);
 
     ctx.save();
     ctx.strokeStyle = meta.color;
@@ -1278,6 +1621,7 @@ class JudanGame {
     for (const shot of this.playerShots) {
       const visual = {
         base: { width: 28, height: 42, color: "#ffb13e" },
+        echo: { width: 20, height: 32, color: "#ffd991" },
         fan: { width: 21, height: 33, color: "#5ee1bf" },
         lance: { width: 48, height: 82, color: "#ff8068" },
         homing: { width: 26, height: 39, color: "#68bfff" },
@@ -1454,8 +1798,7 @@ class JudanGame {
     if (this.state !== "playing") return;
     this.state = "result";
     this.pointer = null;
-    this.player.focus = false;
-    this.dom.focusButton.classList.remove("is-held");
+    this.setShotMode(false);
     this.dom.touchControls.classList.add("is-hidden");
     this.dom.hud.classList.add("is-hidden");
 
