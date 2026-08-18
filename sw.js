@@ -1,10 +1,10 @@
-const CACHE_NAME = "judan-v0.2.1";
+const CACHE_NAME = "judan-v0.3.0";
 const APP_SHELL = [
   "./",
   "index.html",
-  "style.css?v=0.2.1",
-  "src/data.js?v=0.2.1",
-  "src/game.js?v=0.2.1",
+  "style.css?v=0.3.0",
+  "src/data.js?v=0.3.0",
+  "src/game.js?v=0.3.0",
   "manifest.webmanifest",
   "assets/sprites/boar-idle.png",
   "assets/sprites/boar-combat-idle.png",
