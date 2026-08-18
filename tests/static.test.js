@@ -78,13 +78,29 @@ test("表示枠は端末内で正しい9:16を保つ", () => {
   assert.doesNotMatch(viewport, /max-width:/);
 });
 
-test("自機を拡大し、高速・低速の両方で半透明の赤い当たり判定を描く", () => {
+test("自機を拡大し、通常・集中の両方で半透明の実当たり判定を描く", () => {
   const game = read("src/game.js");
   assert.match(game, /const PLAYER_DRAW_SIZE = 184/);
   assert.match(game, /const PLAYER_FOCUS_DRAW_SIZE = 176/);
   assert.match(game, /focused \? 0\.46 : 0\.62/);
   assert.match(game, /ctx\.fillStyle = "#ff334d"/);
-  assert.match(game, /bullet\.radius \+ PLAYER_HIT_RADIUS/);
+  assert.match(game, /const playerHitRadius = this\.getPlayerHitRadius\(\)/);
+  assert.match(game, /bullet\.radius \+ playerHitRadius/);
+});
+
+test("通常・集中は同じ移動速度で切り替わり、調律UIを備える", () => {
+  const html = read("index.html");
+  const data = read("src/data.js");
+  const game = read("src/game.js");
+  for (const id of ["shot-mode-button", "panel-build", "stance-list", "fang-sigil-list", "companion-inscription-list"]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(game, /toggleShotMode/);
+  assert.match(game, /const focused = this\.player\.focus/);
+  assert.doesNotMatch(game, /this\.stats\.speed \* \(focused/);
+  assert.match(data, /export const STANCE_TYPES/);
+  assert.match(data, /export const FANG_SIGILS/);
+  assert.match(data, /export const COMPANION_INSCRIPTIONS/);
 });
 
 test("通常装備と独立した随伴器UIが主砲を残して4系統の副砲を加える", () => {
@@ -101,7 +117,7 @@ test("通常装備と独立した随伴器UIが主砲を残して4系統の副�
   assert.match(html, /基本の双牙弾は常時発射/);
   assert.match(game, /fireMainShots\(focused\)/);
   assert.match(game, /fireOptionShots\(focused\)/);
-  assert.match(game, /const interval = this\.stats\.fireInterval \/ overdriveRate/);
+  assert.match(game, /const interval = this\.getMainFireInterval\(focused\) \/ overdriveRate/);
   assert.doesNotMatch(game, /this\.stats\.fireInterval \* optionInterval/);
   assert.match(game, /generateOptionDrop/);
   assert.match(game, /addOption/);
