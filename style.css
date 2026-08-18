@@ -120,8 +120,8 @@ button { color: inherit; }
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -134,7 +134,7 @@ button { color: inherit; }
   border-radius: 10px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -174,6 +174,98 @@ button { color: inherit; }
   background: var(--panel-soft);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
 }
+
+.build-summary {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.build-summary-item {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(7, 10, 17, 0.72);
+}
+
+.build-summary-item span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.build-summary-item strong {
+  display: block;
+  overflow: hidden;
+  color: var(--amber);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-section {
+  margin-bottom: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(9, 13, 22, 0.86);
+}
+
+.build-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.build-section-heading h3 { margin: 0; font-size: 14px; }
+.build-section-heading span { color: var(--teal); font-size: 10px; font-weight: 900; }
+.build-help { margin: -1px 0 7px; color: var(--muted); font-size: 8px; line-height: 1.45; }
+
+.build-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.build-card {
+  display: grid;
+  grid-template-columns: 31px 1fr;
+  gap: 6px;
+  min-height: 76px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(27, 34, 49, 0.88);
+  text-align: left;
+  cursor: pointer;
+}
+
+.build-card.is-equipped {
+  border-color: var(--module-color, var(--teal));
+  background: color-mix(in srgb, var(--module-color, var(--teal)) 14%, rgba(20, 26, 39, 0.94));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--module-color, var(--teal)) 42%, transparent), 0 0 18px rgba(85, 214, 194, 0.08);
+}
+
+.build-card-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--module-color, var(--teal)) 60%, white 10%);
+  border-radius: 9px;
+  color: var(--module-color, var(--teal));
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.build-card h4 { margin: 0 0 3px; font-size: 11px; }
+.build-card p { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.38; }
+.build-card.is-equipped h4::after { content: "  接続"; color: var(--teal); font-size: 7px; }
 
 .hero-card {
   display: grid;
@@ -492,7 +584,11 @@ button { color: inherit; }
 .control-button small { display: block; }
 .control-button span { font-size: 10px; font-weight: 900; }
 .control-button small { margin-top: 2px; color: var(--muted); font-size: 7px; letter-spacing: 0.14em; }
-.focus-button.is-held { border-color: var(--teal); background: rgba(21, 101, 98, 0.72); transform: scale(0.96); }
+.shot-mode-button.is-focused {
+  border-color: var(--teal);
+  background: rgba(21, 101, 98, 0.76);
+  box-shadow: 0 0 20px rgba(85, 214, 194, 0.22), inset 0 0 24px rgba(85, 214, 194, 0.18);
+}
 .bomb-button { border-color: rgba(255, 194, 102, 0.36); }
 .bomb-button:disabled { opacity: 0.34; }
 
